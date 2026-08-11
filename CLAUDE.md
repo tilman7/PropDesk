@@ -23,6 +23,7 @@ Ein Commit enthält immer beides: die geänderten `src/`-Dateien **und** die neu
 | Datei | Inhalt |
 |---|---|
 | `src/theme.js` | Farbtokens (dark/light), Schriftstapel, Zahlen-Stile |
+| `src/logos.js` | Firmenzeichen als Base64-Masken (Apex, Lucid) |
 | `src/lib.js` | Storage, Gist-Sync, Währung, Formatierung, **alle Berechnungen** |
 | `src/ui.js` | Basiskomponenten (Felder, Balken, Zeilen, Modal, Raster) |
 | `src/accounts.js` | Tabellenzeile, Detailseite, Formular, Quick-Balance, Archiv |
@@ -58,6 +59,17 @@ Laden seine Daten.
 **Journal-Rendite.** `monthly` ist eine Map `{ "2026-08": 4.2 }` mit dem manuell erfassten
 Prozentwert aus dem Trading-Journal. Rein statistisch — dieser Wert darf in keine Geld-,
 Drawdown- oder Risikorechnung einfliessen.
+
+**Prop-Firmen und Presets.** `FIRMS` und `PRESETS` in `src/lib.js`; `PRESETS` ist nach
+Firma geschlüsselt, innerhalb davon nach `group` (Apex: EOD; Lucid: Flex, Pro). Am Account
+steht die Firma weiterhin als Freitext in `firm` — `firmId()` leitet daraus die Kennung ab,
+damit alte Datensätze weiter funktionieren. Neue Firma heisst: Eintrag in `FIRMS`, Presets
+ergänzen, Maske in `src/logos.js` hinterlegen.
+
+**Firmenzeichen.** `FirmMark` in `src/ui.js` nutzt die PNGs als CSS-Maske und färbt sie mit
+einer Themefarbe. Deshalb müssen die Dateien in `src/logos.js` reine Alphamasken sein
+(RGB weiss, Form im Alphakanal) — ein farbiges Logo mit weissem Hintergrund würde als
+weisser Klotz erscheinen.
 
 **Blown-Accounts.** `calcAccount().breached` ist wahr, sobald die Balance auf oder unter
 dem Drawdown-Level liegt. Archiviert wird nie automatisch, sondern über einen Klick —

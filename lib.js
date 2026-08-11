@@ -6,12 +6,40 @@ export const KEY_SETTINGS = 'riskdesk:settings';
 export const GIST_DESC = 'RiskDesk Sync Data';
 export const GIST_FILE = 'riskdesk.json';
 
-export const PRESETS = [
-  { label: '25K EOD', size: 25000, target: 1500, trail: 1000, dll: 500, contracts: 4, paContracts: 2, activationFee: 89 },
-  { label: '50K EOD', size: 50000, target: 3000, trail: 2000, dll: 1000, contracts: 6, paContracts: 4, activationFee: 119 },
-  { label: '100K EOD', size: 100000, target: 6000, trail: 3000, dll: 1500, contracts: 8, paContracts: 6, activationFee: 119 },
-  { label: '150K EOD', size: 150000, target: 9000, trail: 4000, dll: 2000, contracts: 12, paContracts: 9, activationFee: 149 },
+// Prop-Firmen. `id` landet als `firm` am Account und steuert Preset-Liste und Zeichen.
+export const FIRMS = [
+  { id: 'apex', label: 'Apex' },
+  { id: 'lucid', label: 'Lucid' },
 ];
+// Ältere Accounts tragen den Namen als Freitext — daraus die Firma erraten.
+export const firmId = (firm) => {
+  const f = String(firm || '').toLowerCase();
+  if (f.includes('lucid')) return 'lucid';
+  if (f.includes('apex')) return 'apex';
+  return null;
+};
+export const firmLabel = (firm) => FIRMS.find((x) => x.id === firmId(firm))?.label || firm || '–';
+
+// Alle Werte in USD, Stand der jeweiligen Firmenseite. Gruppen erscheinen im
+// Formular als getrennte Reihen.
+export const PRESETS = {
+  apex: [
+    { group: 'EOD', label: '25K', size: 25000, target: 1500, trail: 1000, dll: 500, contracts: 4, paContracts: 2, activationFee: 89, consistencyPct: 50 },
+    { group: 'EOD', label: '50K', size: 50000, target: 3000, trail: 2000, dll: 1000, contracts: 6, paContracts: 4, activationFee: 119, consistencyPct: 50 },
+    { group: 'EOD', label: '100K', size: 100000, target: 6000, trail: 3000, dll: 1500, contracts: 8, paContracts: 6, activationFee: 119, consistencyPct: 50 },
+    { group: 'EOD', label: '150K', size: 150000, target: 9000, trail: 4000, dll: 2000, contracts: 12, paContracts: 9, activationFee: 149, consistencyPct: 50 },
+  ],
+  lucid: [
+    // Flex: Konsistenz 50 % in der Evaluation, in Funded keine. Activation frei.
+    { group: 'Flex', label: '25K', size: 25000, target: 1250, trail: 1000, dll: 600, contracts: 2, paContracts: 2, activationFee: 0, consistencyPct: 50, paConsistencyPct: 0, resetFee: 50 },
+    { group: 'Flex', label: '50K', size: 50000, target: 3000, trail: 2000, dll: 1200, contracts: 4, paContracts: 4, activationFee: 0, consistencyPct: 50, paConsistencyPct: 0, resetFee: 90 },
+    { group: 'Flex', label: '100K', size: 100000, target: 6000, trail: 3000, dll: 1800, contracts: 6, paContracts: 6, activationFee: 0, consistencyPct: 50, paConsistencyPct: 0, resetFee: 170 },
+    // Pro: Konsistenzregel auf der Preisseite nicht ausgewiesen — 50 % als Annahme, im Formular prüfen.
+    { group: 'Pro', label: '25K', size: 25000, target: 1250, trail: 1000, dll: 600, contracts: 2, paContracts: 2, activationFee: 0, consistencyPct: 50, resetFee: 70 },
+    { group: 'Pro', label: '50K', size: 50000, target: 3000, trail: 2000, dll: 1200, contracts: 4, paContracts: 4, activationFee: 0, consistencyPct: 50, resetFee: 115 },
+    { group: 'Pro', label: '100K', size: 100000, target: 6000, trail: 3000, dll: 1800, contracts: 6, paContracts: 6, activationFee: 0, consistencyPct: 50, resetFee: 180 },
+  ],
+};
 
 const RISK_DEFAULTS = { eval: 400, pa: 250, live: 250 };
 export const riskDefault = (phase) => RISK_DEFAULTS[phase] ?? 250;

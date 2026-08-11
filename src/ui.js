@@ -1,6 +1,7 @@
 // Basisbausteine. Raster, Haarlinien, tabellarische Zahlen. Radien klein (6px).
 import React, { useState, useEffect } from 'react';
 import { T, SANS, NUM, display, cap } from './theme.js';
+import { FIRM_MASKS } from './logos.js';
 
 export const h = React.createElement;
 
@@ -213,6 +214,24 @@ export function Mark({ size = 20, color, track }) {
     h('circle', { cx: 20, cy: 20, r: 15, stroke: track || T.border, strokeWidth: 4 }),
     h('path', { d: 'M20 5A15 15 0 0 1 30.61 30.61', stroke: color || T.text, strokeWidth: 4, strokeLinecap: 'round' })
   );
+}
+
+// Firmenzeichen: das PNG dient nur als Maske, die Farbe kommt aus dem Theme.
+export function FirmMark({ firm, size = 13, color, style }) {
+  const src = FIRM_MASKS[firm];
+  if (!src) return null;
+  return h('span', {
+    'aria-hidden': 'true',
+    style: {
+      display: 'inline-block', width: size, height: size, flexShrink: 0,
+      background: color || T.faint,
+      WebkitMaskImage: `url(${src})`, maskImage: `url(${src})`,
+      WebkitMaskSize: 'contain', maskSize: 'contain',
+      WebkitMaskRepeat: 'no-repeat', maskRepeat: 'no-repeat',
+      WebkitMaskPosition: 'center', maskPosition: 'center',
+      verticalAlign: '-2px', ...style,
+    },
+  });
 }
 
 // Spaltenkopf der Account-Tabelle.

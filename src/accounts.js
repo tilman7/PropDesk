@@ -1,8 +1,8 @@
 // Accounts: Tabellenzeile, Detailseite, Formular, Quick-Balance, Archiv.
 import React, { useState } from 'react';
 import { T, SANS, NUM, display, cap } from './theme.js';
-import { h, useNarrow, inputS, numS, Label, Field, Bar, Chip, PhaseTag, DataRow, Modal, ModalHead, Btn, Ghost, Danger, SectionLabel, ColHead, Panel } from './ui.js';
-import { calcAccount, fmt, fmtUsd, PRESETS, riskDefault, uid } from './lib.js';
+import { h, useNarrow, FirmMark, inputS, numS, Label, Field, Bar, Chip, PhaseTag, DataRow, Modal, ModalHead, Btn, Ghost, Danger, SectionLabel, ColHead, Panel } from './ui.js';
+import { calcAccount, fmt, fmtUsd, PRESETS, FIRMS, firmId, firmLabel, riskDefault, uid } from './lib.js';
 
 const bufferColor = (pct) => (pct > 0.5 ? T.green : pct > 0.25 ? T.amber : T.red);
 export const COLS = '1.6fr 0.8fr 0.9fr 1.5fr 0.7fr 1.1fr';
@@ -50,7 +50,8 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
         h('div', { style: { minWidth: 0 } },
           h('div', { style: { fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, a.name),
           h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, ...NUM } },
-            h(PhaseTag, { phase: a.phase }), ` · ${a.firm} · ${fmtUsd(a.size)}`)
+            h(PhaseTag, { phase: a.phase }), ' · ',
+            h(FirmMark, { firm: firmId(a.firm), size: 11 }), ` ${firmLabel(a.firm)} · ${fmtUsd(a.size)}`)
         ),
         h('div', { style: { textAlign: 'right', flexShrink: 0 } },
           h('div', { style: { ...display(21) } }, fmtUsd(c.risk)),
@@ -90,7 +91,8 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
   },
     h('div', { style: { minWidth: 0 } },
       h('div', { style: { fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em' } }, a.name),
-      h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 5, ...NUM } }, `${a.firm} · ${fmtUsd(a.size)}`)
+      h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 5, display: 'flex', alignItems: 'center', gap: 5, ...NUM } },
+        h(FirmMark, { firm: firmId(a.firm), size: 11 }), `${firmLabel(a.firm)} · ${fmtUsd(a.size)}`)
     ),
     h('div', null, h(PhaseTag, { phase: a.phase })),
     h('div', { style: { textAlign: 'right', ...display(20) } }, fmtUsd(c.risk)),
@@ -155,7 +157,8 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
       h('div', null,
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 } },
           h(PhaseTag, { phase: a.phase }),
-          h('span', { style: { fontSize: 12, color: T.faint, ...NUM } }, `${a.firm} · ${fmtUsd(a.size)}`),
+          h('span', { style: { fontSize: 12, color: T.faint, display: 'inline-flex', alignItems: 'center', gap: 6, ...NUM } },
+            h(FirmMark, { firm: firmId(a.firm), size: 12 }), `${firmLabel(a.firm)} · ${fmtUsd(a.size)}`),
           c.expiryDays !== null && h(Chip, {
             color: c.expiryDays <= 3 ? T.red : c.expiryDays <= 7 ? T.amber : T.muted,
             bg: c.expiryDays <= 3 ? T.redSoft : c.expiryDays <= 7 ? T.amberSoft : T.chipBg,
@@ -323,12 +326,14 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
 
 export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
   const [f, setF] = useState(initial || {
-    name: '', firm: 'Apex', size: 50000, phase: 'eval',
+    name: '', firm: '', size: 50000, phase: 'eval',
     startBalance: 50000, balance: 50000, highWater: 50000,
     trail: 2000, target: 3000, dll: 1000, riskPerTrade: riskDefault('eval'),
     maxContracts: 6, consistencyPct: 50, bestDayProfit: 0,
-    activationFee: 99, activationPaid: false, expiryDate: '', notes: '',
+    activationFee: 0, activationPaid: false, expiryDate: '', notes: '',
   });
+  // Beim Bearbeiten die Firma aus dem gespeicherten Freitext ableiten.
+  const [firm, setFirm] = useState(() => (initial ? firmId(initial.firm) : null));
   const [more, setMore] = useState(!!initial);
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const num = (k) => (e) => set(k, e.target.value === '' ? '' : parseFloat(e.target.value));
@@ -338,17 +343,25 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
     return { ...s, phase, riskPerTrade: wasDefault ? riskDefault(phase) : s.riskPerTrade };
   });
 
-  const applyPreset = (p) => setF((s) => {
+  const applyPreset = (p, fid) => setF((s) => {
     const untouched = Number(s.balance) === Number(s.startBalance);
+    const label = FIRMS.find((x) => x.id === fid)?.label || '';
+    // Funded-Konsistenz kann abweichen (Lucid Flex: in Funded keine Regel).
+    const consistency = s.phase === 'eval'
+      ? p.consistencyPct
+      : (p.paConsistencyPct !== undefined ? p.paConsistencyPct : p.consistencyPct);
     return {
       ...s,
+      firm: label,
       size: p.size, startBalance: p.size,
       balance: untouched ? p.size : s.balance,
       highWater: Math.max(p.size, Number(s.balance) || 0),
       trail: p.trail, target: p.target, dll: p.dll,
       maxContracts: s.phase === 'eval' ? p.contracts : p.paContracts,
       activationFee: p.activationFee,
-      name: s.name || `Apex ${p.label}`,
+      consistencyPct: consistency,
+      presetLabel: `${p.group} ${p.label}`,
+      name: s.name || `${label} ${p.group} ${p.label}`,
     };
   });
 
@@ -367,22 +380,48 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
   return h(Modal, { onClose, max: 620, z: 60 },
     h(ModalHead, {
       title: initial ? 'Account bearbeiten' : 'Account anlegen',
-      subtitle: initial ? null : 'Preset wählen — Name und Risiko prüfen. Alles Weitere ist optional.',
+      subtitle: initial ? null : 'Firma und Kontogrösse wählen — Name und Risiko prüfen. Alles Weitere ist optional.',
       onClose,
     }),
 
-    !initial && h(Field, { label: 'Apex EOD-Preset' },
-      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-        PRESETS.map((p) => h('button', {
-          key: p.label, onClick: () => applyPreset(p),
+    !initial && h(Field, { label: 'Prop-Firma' },
+      h('div', { style: { display: 'flex', gap: 8 } },
+        FIRMS.map((x) => h('button', {
+          key: x.id,
+          onClick: () => { setFirm(x.id); setF((s) => ({ ...s, firm: x.label })); },
           style: {
-            background: Number(f.size) === p.size ? T.chipBg : 'transparent',
-            border: `1px solid ${Number(f.size) === p.size ? T.text : T.border}`,
-            color: T.text, borderRadius: 6, padding: '9px 15px', fontSize: 13,
-            cursor: 'pointer', fontFamily: SANS, ...NUM,
+            flex: 1, background: firm === x.id ? T.chipBg : 'transparent',
+            border: `1px solid ${firm === x.id ? T.text : T.border}`,
+            color: firm === x.id ? T.text : T.muted, borderRadius: 6,
+            padding: '11px 15px', fontSize: 13.5, cursor: 'pointer', fontFamily: SANS,
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9,
           },
-        }, p.label))
+        },
+          h(FirmMark, { firm: x.id, size: 14, color: firm === x.id ? T.text : T.faint }),
+          x.label
+        ))
       )
+    ),
+
+    !initial && firm && h(Field, { label: 'Kontogrösse' },
+      // Gruppen (Apex EOD; Lucid Flex und Pro) als getrennte Reihen.
+      [...new Set(PRESETS[firm].map((p) => p.group))].map((g) => h('div', { key: g, style: { marginBottom: 10 } },
+        h('div', { style: { fontSize: 11.5, color: T.faint, marginBottom: 7 } }, g),
+        h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
+          PRESETS[firm].filter((p) => p.group === g).map((p) => {
+            const on = f.presetLabel === `${p.group} ${p.label}`;
+            return h('button', {
+              key: g + p.label, onClick: () => applyPreset(p, firm),
+              style: {
+                background: on ? T.chipBg : 'transparent',
+                border: `1px solid ${on ? T.text : T.border}`,
+                color: T.text, borderRadius: 6, padding: '9px 15px', fontSize: 13,
+                cursor: 'pointer', fontFamily: SANS, ...NUM,
+              },
+            }, p.label);
+          })
+        )
+      ))
     ),
 
     h(Field, { label: 'Phase' },
@@ -391,7 +430,7 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
 
     h('div', { style: two },
       h(Field, { label: 'Name' },
-        h('input', { value: f.name, onChange: (e) => set('name', e.target.value), style: inputS(), placeholder: 'z. B. Apex 50K #1' })),
+        h('input', { value: f.name, onChange: (e) => set('name', e.target.value), style: inputS(), placeholder: 'z. B. Apex EOD 50K #1' })),
       h(Field, { label: `Max. Risiko pro Trade (USD) · Standard $${riskDefault(f.phase)}` },
         h('input', { type: 'number', value: f.riskPerTrade, onChange: num('riskPerTrade'), style: { ...numS(), borderColor: T.text } })),
       h(Field, { label: 'Aktuelle Balance (USD)' },
@@ -500,7 +539,8 @@ export function ArchiveView({ archived, onRestore, onDelete }) {
       },
         h('div', null,
           h('div', { style: { fontSize: 14.5, fontWeight: 500 } }, a.name),
-          h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, ...NUM } }, `${a.firm} · ${fmtUsd(a.size)}`)
+          h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, display: 'flex', alignItems: 'center', gap: 5, ...NUM } },
+            h(FirmMark, { firm: firmId(a.firm), size: 11 }), `${firmLabel(a.firm)} · ${fmtUsd(a.size)}`)
         ),
         h('div', null,
           a.archivedAs === 'blown'
