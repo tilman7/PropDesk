@@ -61,6 +61,12 @@ sonst verliert der Nutzer Daten und Sync-Ziel.
 Render-Rumpf von `App` aufgerufen, nicht in einem Effekt. In einem Effekt wären die
 Farben beim ersten Rendern nach dem Umschalten noch die alten.
 
+**Responsives Verhalten.** `useNarrow()` aus `src/ui.js` liefert `true` unter 760px.
+Layouts, die als Tabelle gedacht sind (Account-Liste, Archiv, Zahlungsliste), stapeln
+sich darunter; die Navigation wird zum Ausklappmenü im Header. `html, body` haben
+`overflow-x: hidden` — kein Element darf breiter als der Viewport werden. Nach Layout-
+Änderungen bei 320px, 390px und 1440px gegenprüfen.
+
 **Keine Build-Tools, Frameworks oder Web-Fonts hinzufügen.** Eine HTML-Datei ohne externe
 Abhängigkeiten zur Laufzeit ist Absicht: die Seite lädt offline, funktioniert als PWA auf
 dem iPhone und hat keine Angriffsfläche über Dritt-CDNs. Die Schrift ist bewusst der
