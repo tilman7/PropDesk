@@ -520,7 +520,9 @@ function SettingsView({
       h('div', null,
         toggle('Erscheinungsbild', theme === 'light' ? 'Hell' : 'Dunkel', onToggleTheme, 'Gilt auf diesem Gerät.'),
         toggle('Anzeigewährung', currency, onToggleCurrency,
-          chfRate ? `Kurs USD→CHF ${chfRate.toFixed(3)} · Eingaben bleiben in USD` : 'Eingaben bleiben immer in USD')
+          chfRate
+            ? `Kurs USD→CHF ${chfRate.toFixed(3)} · Zahlungen werden in dieser Währung erfasst, Account-Werte bleiben in USD`
+            : 'Zahlungen werden in der gewählten Währung erfasst, Account-Werte bleiben in USD')
       )
     ),
 

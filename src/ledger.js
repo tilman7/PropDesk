@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { T, SANS, NUM, display, cap } from './theme.js';
 import { h, useNarrow, inputS, numS, Label, Field, Bar, Modal, ModalHead, Btn, Ghost, Danger, SectionLabel, MetricRow, Empty } from './ui.js';
-import { calcLedger, fileToDoc, humanBytes, openDoc, fmt, fmtAlt, approxCHF, fmtPct, journalStats, CATEGORIES, catLabel, monthKey, monthLabel, today, uid } from './lib.js';
+import { calcLedger, fileToDoc, humanBytes, openDoc, curCode, toInput, fromInput, fmt, fmtAlt, approxCHF, fmtPct, journalStats, CATEGORIES, catLabel, monthKey, monthLabel, today, uid } from './lib.js';
 
 const GUTTER = 64;
 
@@ -340,11 +340,14 @@ export function Ledger({ transactions, accounts, monthly, onSetMonthly, onAdd, o
 }
 
 export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts = {}, onClose, onSubmit, onDelete, chfRate }) {
-  const [t, setT] = useState(initial || {
-    type: defaultType,
-    category: defaultType === 'payout' ? 'payout' : 'eval_fee',
-    amount: '', date: today(), accountId: '', firm: 'Apex', note: '',
-  });
+  // Der Feldwert steht in der Anzeigewährung, gespeichert wird in USD.
+  const [t, setT] = useState(initial
+    ? { ...initial, amount: toInput(initial.amount) }
+    : {
+        type: defaultType,
+        category: defaultType === 'payout' ? 'payout' : 'eval_fee',
+        amount: '', date: today(), accountId: '', firm: 'Apex', note: '',
+      });
   const [armed, setArmed] = useState(false);
   const [docErr, setDocErr] = useState('');
   const [docBusy, setDocBusy] = useState(false);
@@ -364,7 +367,7 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
     category: type === 'payout' ? 'payout' : s.category === 'payout' ? 'eval_fee' : s.category,
   }));
 
-  const suggested = !isPayout && lastAmounts[t.category] && !t.amount ? lastAmounts[t.category] : null;
+  const suggested = !isPayout && lastAmounts[t.category] && !t.amount ? toInput(lastAmounts[t.category]) : null;
 
   const pill = (active) => ({
     background: active ? T.chipBg : 'transparent',
@@ -391,19 +394,24 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
         }, label))
     ),
 
-    h(Field, { label: 'Betrag (USD)' },
+    h(Field, { label: `Betrag (${curCode()})` },
       h('input', {
         autoFocus: true, type: 'number', value: t.amount,
         onChange: (e) => set('amount', e.target.value === '' ? '' : parseFloat(e.target.value)),
         inputMode: 'decimal', placeholder: suggested ? String(suggested) : '0',
         style: { ...numS(), fontSize: 22, fontWeight: 500, letterSpacing: '-0.03em', padding: '14px' },
       }),
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: 7 } },
-        h('span', { style: { fontSize: 11.5, color: T.faint, ...NUM } }, approxCHF(t.amount, chfRate)),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', marginTop: 7, gap: 12 } },
+        h('span', { style: { fontSize: 11.5, color: T.faint, ...NUM } },
+          t.amount === '' || isNaN(t.amount)
+            ? ''
+            : curCode() === 'CHF'
+              ? `entspricht $${fromInput(t.amount).toLocaleString('en-US', { maximumFractionDigits: 2 })} · so gespeichert`
+              : approxCHF(t.amount, chfRate)),
         suggested && h('button', {
           onClick: () => set('amount', suggested),
-          style: { background: 'none', border: 'none', color: T.accent, fontSize: 11.5, cursor: 'pointer', fontFamily: SANS, padding: 0 },
-        }, `zuletzt $${suggested} übernehmen`)
+          style: { background: 'none', border: 'none', color: T.accent, fontSize: 11.5, cursor: 'pointer', fontFamily: SANS, padding: 0, whiteSpace: 'nowrap' },
+        }, `zuletzt ${fmt(fromInput(suggested))} übernehmen`)
       )
     ),
 
@@ -473,7 +481,7 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
     h('div', { style: { display: 'flex', gap: 10 } },
       h(Btn, {
         style: { flex: 1 }, disabled: !t.amount || (isPayout && !t.doc) || docBusy,
-        onClick: () => onSubmit({ ...t, id: t.id || uid(), amount: Math.abs(Number(t.amount) || 0) }),
+        onClick: () => onSubmit({ ...t, id: t.id || uid(), amount: Math.abs(Number(fromInput(t.amount)) || 0) }),
       }, initial ? 'Änderungen speichern' : 'Erfassen'),
       initial && h(Danger, {
         armed, onClick: () => (armed ? onDelete(t.id) : setArmed(true)), onBlur: () => setArmed(false),

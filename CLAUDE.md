@@ -43,7 +43,11 @@ Drawdown trailt dem höchsten *Tagesschluss*, nicht der laufenden Balance. Der H
 Wert steigt deshalb nur über einen ausdrücklichen Tagesabschluss. Diese Trennung nicht
 "vereinfachen" — sie ist der Kern des Tools und war vorher ein Bug.
 
-**Datenformat.** Beträge liegen immer in USD; der Währungsschalter ist reine Anzeige.
+**Datenformat.** Beträge liegen immer in USD. Der Währungsschalter betrifft die Anzeige
+und zusätzlich das Betragsfeld im Zahlungsformular: dort steht der Wert in der
+Anzeigewährung und wird über `toInput()` / `fromInput()` (in `src/lib.js`) umgerechnet.
+Account-Felder — Balance, High-Water, Trail, Target, Risiko — bleiben USD, weil es die
+wörtlichen Zahlen aus der Prop-Firm-Plattform sind.
 `migrate()` liest ältere Blobs ohne `transactions` und ohne `monthly`. Feldnamen in
 `accounts` und `transactions` nicht umbenennen, sonst verliert der Nutzer beim nächsten
 Laden seine Daten.

@@ -87,12 +87,27 @@ export async function writeGist(token, id, data) {
 export const CHF_FALLBACK = 0.8;
 export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-// Anzeigewährung. Beträge liegen IMMER in USD, das hier ist reine Darstellung.
+// Anzeigewährung. Gespeichert wird IMMER in USD — Prop-Firmen rechnen in USD ab,
+// und ein Wechselkurs von heute darf einen Betrag von damals nicht verändern.
 const CUR = { code: 'USD', rate: 1 };
 export function setCurrency(code, rate) {
   CUR.code = code === 'CHF' ? 'CHF' : 'USD';
   CUR.rate = CUR.code === 'CHF' ? rate || CHF_FALLBACK : 1;
 }
+export const curCode = () => CUR.code;
+
+// Eingabefelder für Zahlungen laufen in der Anzeigewährung. Diese beiden
+// rechnen zwischen Feldwert und gespeichertem USD-Betrag um.
+export const toInput = (usdValue) => {
+  if (usdValue === '' || usdValue == null || isNaN(usdValue)) return '';
+  const n = Number(usdValue) * CUR.rate;
+  return CUR.code === 'CHF' ? Math.round(n * 100) / 100 : n;
+};
+export const fromInput = (shown) => {
+  if (shown === '' || shown == null || isNaN(shown)) return '';
+  const n = Number(shown) / CUR.rate;
+  return CUR.code === 'CHF' ? Math.round(n * 100) / 100 : n;
+};
 
 export const fmt = (v, digits = 0) => {
   if (v == null || v === '' || isNaN(v)) return '–';
