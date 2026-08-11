@@ -1,0 +1,74 @@
+# PropDesk — Arbeitsanweisungen
+
+Persönliches Risk- und Kostentool für Prop-Trading-Accounts (Apex, EOD-Trailing).
+Läuft als statische Seite auf GitHub Pages, Daten liegen im Browser und synchronisieren
+über einen privaten GitHub-Gist.
+
+## Die wichtigste Regel
+
+**`index.html` niemals von Hand bearbeiten.** Die Datei ist ein minifizierter
+esbuild-Output und wird bei jedem Build vollständig überschrieben. Änderungen gehören
+ausschliesslich in `src/`, danach:
+
+```bash
+npm install     # nur beim ersten Mal
+node build.mjs  # erzeugt index.html neu
+```
+
+Ein Commit enthält immer beides: die geänderten `src/`-Dateien **und** die neu gebaute
+`index.html`. Wird nur `src/` committet, ändert sich die Live-Seite nicht.
+
+## Aufbau
+
+| Datei | Inhalt |
+|---|---|
+| `src/theme.js` | Farbtokens (dark/light), Schriftstapel, Zahlen-Stile |
+| `src/lib.js` | Storage, Gist-Sync, Währung, Formatierung, **alle Berechnungen** |
+| `src/ui.js` | Basiskomponenten (Felder, Balken, Zeilen, Modal, Raster) |
+| `src/accounts.js` | Tabellenzeile, Detailseite, Formular, Quick-Balance, Archiv |
+| `src/ledger.js` | Finanzen: Kennzahlen, Monatschart, Zahlungsliste, Zahlungsformular |
+| `src/App.js` | Shell, Navigation, Ansichten, Sync, Einstellungen, Handler |
+| `build.mjs` | Bundelt `src/main.js` und schreibt `index.html` |
+
+Es wird **kein JSX** verwendet: die Komponenten rufen `h(...)` (`React.createElement`)
+direkt auf. Das hält den Build simpel und die Dateien lesbar.
+
+Reines Design und Layout: `src/theme.js` plus die Style-Objekte in den Komponenten.
+Für einen Redesign-Auftrag reicht das — `src/lib.js` bleibt dabei unangetastet.
+
+## Was nicht kaputtgehen darf
+
+**Rechenlogik in `src/lib.js`.** `calcAccount()` bildet Apex' EOD-Trailing ab: der
+Drawdown trailt dem höchsten *Tagesschluss*, nicht der laufenden Balance. Der High-Water-
+Wert steigt deshalb nur über einen ausdrücklichen Tagesabschluss. Diese Trennung nicht
+"vereinfachen" — sie ist der Kern des Tools und war vorher ein Bug.
+
+**Datenformat.** Beträge liegen immer in USD; der Währungsschalter ist reine Anzeige.
+`migrate()` liest ältere Blobs ohne `transactions` und ohne `monthly`. Feldnamen in
+`accounts` und `transactions` nicht umbenennen, sonst verliert der Nutzer beim nächsten
+Laden seine Daten.
+
+**Journal-Rendite.** `monthly` ist eine Map `{ "2026-08": 4.2 }` mit dem manuell erfassten
+Prozentwert aus dem Trading-Journal. Rein statistisch — dieser Wert darf in keine Geld-,
+Drawdown- oder Risikorechnung einfliessen.
+
+**Kein `localStorage`-Key umbenennen** (`riskdesk:data`, `riskdesk:settings`) und die
+Gist-Beschreibung `RiskDesk Sync Data` nicht ändern — daran findet die App ihren Gist wieder.
+Die App heisst seit v9 PropDesk; diese beiden technischen Bezeichner bleiben bewusst alt,
+sonst verliert der Nutzer Daten und Sync-Ziel.
+
+**Theme synchron anwenden.** `applyTheme()` mutiert das Token-Objekt `T` und wird im
+Render-Rumpf von `App` aufgerufen, nicht in einem Effekt. In einem Effekt wären die
+Farben beim ersten Rendern nach dem Umschalten noch die alten.
+
+**Keine Build-Tools, Frameworks oder Web-Fonts hinzufügen.** Eine HTML-Datei ohne externe
+Abhängigkeiten zur Laufzeit ist Absicht: die Seite lädt offline, funktioniert als PWA auf
+dem iPhone und hat keine Angriffsfläche über Dritt-CDNs. Die Schrift ist bewusst der
+System-Helvetica-Stapel.
+
+## Testen vor dem Commit
+
+`index.html` im Browser öffnen und durchgehen: Account anlegen, Balance ändern,
+Tag abschliessen, Detailseite öffnen und speichern, Zahlung erfassen, Journal-Rendite
+eintragen (im Chart und unter Einstellungen), Währung umschalten, Theme umschalten,
+Einstellungen → Export JSON. Konsole muss frei von Fehlern sein.
