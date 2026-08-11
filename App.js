@@ -210,7 +210,7 @@ export default function App() {
       id = await writeGist(token, null, local);
     }
     const ns = { ...loadSettings(), token, gistId: id };
-    saveSettings(ns); setSettings(ns); setSync('synced'); setSettingsOpen(false);
+    saveSettings(ns); setSettings(ns); setSync('synced');
   };
   const disconnect = () => { const ns = { theme: loadSettings().theme }; saveSettings(ns); setSettings(ns); setSync('off'); };
 
