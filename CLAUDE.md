@@ -46,8 +46,11 @@ Wert steigt deshalb nur über einen ausdrücklichen Tagesabschluss. Diese Trennu
 **Datenformat.** Beträge liegen immer in USD. Der Währungsschalter betrifft die Anzeige
 und zusätzlich das Betragsfeld im Zahlungsformular: dort steht der Wert in der
 Anzeigewährung und wird über `toInput()` / `fromInput()` (in `src/lib.js`) umgerechnet.
-Account-Felder — Balance, High-Water, Trail, Target, Risiko — bleiben USD, weil es die
-wörtlichen Zahlen aus der Prop-Firm-Plattform sind.
+Account-Werte werden ausnahmslos über `fmtUsd()` ausgegeben — Risiko-Ansicht, Detailseite,
+Archiv, Formulare. Es sind die wörtlichen Zahlen aus der Prop-Firm-Plattform; sie dürfen
+nirgends mit der Anzeigewährung wandern und tragen auch keine CHF-Nebenzeile. Über `fmt()`
+laufen nur Zahlungen und daraus abgeleitete Summen. Wer eine neue Account-Zahl anzeigt,
+nimmt `fmtUsd()`.
 `migrate()` liest ältere Blobs ohne `transactions` und ohne `monthly`. Feldnamen in
 `accounts` und `transactions` nicht umbenennen, sonst verliert der Nutzer beim nächsten
 Laden seine Daten.
@@ -60,6 +63,11 @@ Drawdown- oder Risikorechnung einfliessen.
 dem Drawdown-Level liegt. Archiviert wird nie automatisch, sondern über einen Klick —
 die Balance ist manuell erfasst, ein Tippfehler darf keinen Account wegräumen.
 `archivedAs` ist `'passed'` oder `'blown'`; fehlt das Feld, gilt der Account als bestanden.
+
+**Activation Fee im Zahlungsformular.** Ist einem Ausgaben-Eintrag ein Eval-Account mit
+offener Gebühr zugeordnet, lässt sich die Fee als zweite Buchung mitgeben. `TxForm` ruft
+dann `onSubmit(tx, extra)`; `saveTx()` legt beide Buchungen an und setzt `activationPaid`
+am Account. Der zweite Parameter ist optional — bestehende Aufrufe bleiben gültig.
 
 **Belege.** Payouts erfordern ein Zertifikat, Ausgaben nicht. Dokumente liegen als
 Data-URL unter `transaction.doc` und wandern durch den Gist — deshalb werden Bilder in

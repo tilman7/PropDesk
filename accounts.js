@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { T, SANS, NUM, display, cap } from './theme.js';
 import { h, useNarrow, inputS, numS, Label, Field, Bar, Chip, PhaseTag, DataRow, Modal, ModalHead, Btn, Ghost, Danger, SectionLabel, ColHead, Panel } from './ui.js';
-import { calcAccount, fmt, fmtAlt, approxCHF, PRESETS, riskDefault, uid } from './lib.js';
+import { calcAccount, fmt, fmtUsd, PRESETS, riskDefault, uid } from './lib.js';
 
 const bufferColor = (pct) => (pct > 0.5 ? T.green : pct > 0.25 ? T.amber : T.red);
 export const COLS = '1.6fr 0.8fr 0.9fr 1.5fr 0.7fr 1.1fr';
@@ -34,12 +34,12 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
       : a.phase === 'eval' && c.passed
         ? { text: 'Target erreicht', color: T.green }
         : a.phase === 'eval' && a.activationFee && !a.activationPaid
-          ? { text: `Activation ${fmt(a.activationFee)}`, color: T.muted }
+          ? { text: `Activation ${fmtUsd(a.activationFee)}`, color: T.muted }
           : a.phase === 'eval'
             ? { text: `Target ${Math.round(c.targetProgress * 100)}%`, color: T.muted }
             : c.toSafetyNet === 0
               ? { text: 'Safety Net erreicht', color: T.green }
-              : { text: `Safety Net ${fmt(c.toSafetyNet)}`, color: T.muted };
+              : { text: `Safety Net ${fmtUsd(c.toSafetyNet)}`, color: T.muted };
 
   if (narrow) {
     return h('div', {
@@ -50,17 +50,17 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
         h('div', { style: { minWidth: 0 } },
           h('div', { style: { fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, a.name),
           h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, ...NUM } },
-            h(PhaseTag, { phase: a.phase }), ` · ${a.firm} · ${fmt(a.size)}`)
+            h(PhaseTag, { phase: a.phase }), ` · ${a.firm} · ${fmtUsd(a.size)}`)
         ),
         h('div', { style: { textAlign: 'right', flexShrink: 0 } },
-          h('div', { style: { ...display(21) } }, fmt(c.risk)),
+          h('div', { style: { ...display(21) } }, fmtUsd(c.risk)),
           h('div', { style: { fontSize: 10.5, color: T.faint, marginTop: 4 } }, 'Risiko / Trade')
         )
       ),
       h('div', { style: { marginTop: 14 } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 6, ...NUM } },
-          h('span', { style: { color: bc, fontWeight: 500 } }, fmt(c.buffer)),
-          h('span', { style: { color: T.faint } }, `${c.lossesLeft !== null ? c.lossesLeft + ' Trades · ' : ''}von ${fmt(c.trail)}`)
+          h('span', { style: { color: bc, fontWeight: 500 } }, fmtUsd(c.buffer)),
+          h('span', { style: { color: T.faint } }, `${c.lossesLeft !== null ? c.lossesLeft + ' Trades · ' : ''}von ${fmtUsd(c.trail)}`)
         ),
         h(Bar, { pct: c.bufferPct, color: bc })
       ),
@@ -90,14 +90,14 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
   },
     h('div', { style: { minWidth: 0 } },
       h('div', { style: { fontSize: 15, fontWeight: 500, letterSpacing: '-0.012em' } }, a.name),
-      h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 5, ...NUM } }, `${a.firm} · ${fmt(a.size)}`)
+      h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 5, ...NUM } }, `${a.firm} · ${fmtUsd(a.size)}`)
     ),
     h('div', null, h(PhaseTag, { phase: a.phase })),
-    h('div', { style: { textAlign: 'right', ...display(20) } }, fmt(c.risk)),
+    h('div', { style: { textAlign: 'right', ...display(20) } }, fmtUsd(c.risk)),
     h('div', null,
       h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 7, ...NUM } },
-        h('span', { style: { color: bc, fontWeight: 500 } }, fmt(c.buffer)),
-        h('span', { style: { color: T.faint } }, `von ${fmt(c.trail)}`)
+        h('span', { style: { color: bc, fontWeight: 500 } }, fmtUsd(c.buffer)),
+        h('span', { style: { color: T.faint } }, `von ${fmtUsd(c.trail)}`)
       ),
       h(Bar, { pct: c.bufferPct, color: bc })
     ),
@@ -155,12 +155,12 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
       h('div', null,
         h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 } },
           h(PhaseTag, { phase: a.phase }),
-          h('span', { style: { fontSize: 12, color: T.faint, ...NUM } }, `${a.firm} · ${fmt(a.size)}`),
+          h('span', { style: { fontSize: 12, color: T.faint, ...NUM } }, `${a.firm} · ${fmtUsd(a.size)}`),
           c.expiryDays !== null && h(Chip, {
             color: c.expiryDays <= 3 ? T.red : c.expiryDays <= 7 ? T.amber : T.muted,
             bg: c.expiryDays <= 3 ? T.redSoft : c.expiryDays <= 7 ? T.amberSoft : T.chipBg,
           }, c.expiryDays <= 0 ? 'abgelaufen' : `${c.expiryDays}d bis Ablauf`),
-          a.activationFee && !paid ? h(Chip, { color: T.muted, bg: T.chipBg }, `Activation ${fmt(a.activationFee)} offen`) : null
+          a.activationFee && !paid ? h(Chip, { color: T.muted, bg: T.chipBg }, `Activation ${fmtUsd(a.activationFee)} offen`) : null
         ),
         h('div', { style: { fontSize: 34, fontWeight: 500, letterSpacing: '-0.03em' } }, a.name)
       ),
@@ -179,11 +179,11 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
     } },
       h('div', { style: { background: T.bg, padding: '20px 22px 22px' } },
         h(SectionLabel, null, 'Max. Risiko / Trade'),
-        h('div', { style: { ...display(40), marginTop: 12 } }, fmt(c.risk))
+        h('div', { style: { ...display(40), marginTop: 12 } }, fmtUsd(c.risk))
       ),
       h('div', { style: { background: T.bg, padding: '20px 22px 22px' } },
         h(SectionLabel, null, 'Puffer bis Drawdown'),
-        h('div', { style: { ...display(40, bc), marginTop: 12 } }, fmt(c.buffer)),
+        h('div', { style: { ...display(40, bc), marginTop: 12 } }, fmtUsd(c.buffer)),
         h('div', { style: { marginTop: 14 } }, h(Bar, { pct: c.bufferPct, color: bc }))
       ),
       h('div', { style: { background: T.bg, padding: '20px 22px 22px' } },
@@ -194,7 +194,7 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
       h('div', { style: { background: T.bg, padding: '20px 22px 22px' } },
         h(SectionLabel, null, 'P&L seit Start'),
         h('div', { style: { ...display(40, c.profit >= 0 ? T.green : T.red), marginTop: 12 } },
-          (c.profit >= 0 ? '+' : '−') + fmt(Math.abs(c.profit)))
+          (c.profit >= 0 ? '+' : '−') + fmtUsd(Math.abs(c.profit)))
       )
     ),
 
@@ -206,7 +206,7 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
       h('div', { style: { maxWidth: 620 } },
         h('div', { style: { fontSize: 13.5, color: T.amber, fontWeight: 600, marginBottom: 6 } }, 'Tag noch nicht abgeschlossen'),
         h('div', { style: { fontSize: 12.5, color: T.muted, lineHeight: 1.6, textWrap: 'pretty' } },
-          `Die Balance liegt über dem höchsten EOD-Stand. Der Drawdown trailt erst beim Tagesabschluss nach — danach steht das Level bei ${fmt(c.pendingDdLevel)} und der Puffer bei ${fmt(c.bufferAfterClose)}.`)
+          `Die Balance liegt über dem höchsten EOD-Stand. Der Drawdown trailt erst beim Tagesabschluss nach — danach steht das Level bei ${fmtUsd(c.pendingDdLevel)} und der Puffer bei ${fmtUsd(c.bufferAfterClose)}.`)
       ),
       h('button', {
         onClick: () => onCloseDay(a.id, parseFloat(balance) || 0),
@@ -215,7 +215,7 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
           padding: '11px 16px', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
           fontFamily: SANS, whiteSpace: 'nowrap',
         },
-      }, `Tag mit ${fmt(parseFloat(balance) || 0)} abschliessen`)
+      }, `Tag mit ${fmtUsd(parseFloat(balance) || 0)} abschliessen`)
     ),
 
     c.breached && h('div', { style: {
@@ -226,7 +226,7 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
       h('div', { style: { minWidth: 0 } },
         h('div', { style: { fontSize: 13.5, color: T.red, fontWeight: 600 } }, 'Drawdown-Limit verletzt'),
         h('div', { style: { fontSize: 12.5, color: T.muted, marginTop: 5, lineHeight: 1.5 } },
-          `Balance ${fmt(c.balance)} liegt auf oder unter dem Drawdown-Level ${fmt(c.ddLevel)}. Der Account ist blown.`)
+          `Balance ${fmtUsd(c.balance)} liegt auf oder unter dem Drawdown-Level ${fmtUsd(c.ddLevel)}. Der Account ist blown.`)
       ),
       h(Btn, { onClick: () => onArchiveBlown(a.id), style: { background: T.red, borderColor: T.red, color: '#fff' } },
         'Als Blown archivieren')
@@ -246,16 +246,16 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
     h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 44, marginTop: 44 } },
       h('div', null,
         h(SectionLabel, { style: { marginBottom: 6 } }, 'Regelwerk'),
-        h(DataRow, { label: `Drawdown-Level ${c.ddLocked ? '(gelockt)' : '(EOD trailing)'}`, value: fmt(c.ddLevel) }),
-        h(DataRow, { label: 'Höchster EOD-Stand', value: fmt(c.highWater) }),
-        h(DataRow, { label: 'Trailing Drawdown', value: fmt(c.trail) }),
-        a.dll ? h(DataRow, { label: 'Daily Loss Limit', value: fmt(a.dll) }) : null,
-        a.phase === 'eval' && h(DataRow, { label: 'Profit-Target', value: `${fmt(c.profit)} / ${fmt(c.target)}` }),
-        a.phase === 'eval' && h(DataRow, { label: 'Bis Profit-Target', value: fmt(c.toTarget) }),
+        h(DataRow, { label: `Drawdown-Level ${c.ddLocked ? '(gelockt)' : '(EOD trailing)'}`, value: fmtUsd(c.ddLevel) }),
+        h(DataRow, { label: 'Höchster EOD-Stand', value: fmtUsd(c.highWater) }),
+        h(DataRow, { label: 'Trailing Drawdown', value: fmtUsd(c.trail) }),
+        a.dll ? h(DataRow, { label: 'Daily Loss Limit', value: fmtUsd(a.dll) }) : null,
+        a.phase === 'eval' && h(DataRow, { label: 'Profit-Target', value: `${fmtUsd(c.profit)} / ${fmtUsd(c.target)}` }),
+        a.phase === 'eval' && h(DataRow, { label: 'Bis Profit-Target', value: fmtUsd(c.toTarget) }),
         a.phase !== 'eval' && h(React.Fragment, null,
           h(DataRow, {
-            label: `Safety Net (Payout ab ${fmt(c.safetyNet)})`,
-            value: c.toSafetyNet === 0 ? 'erreicht' : `noch ${fmt(c.toSafetyNet)}`,
+            label: `Safety Net (Payout ab ${fmtUsd(c.safetyNet)})`,
+            value: c.toSafetyNet === 0 ? 'erreicht' : `noch ${fmtUsd(c.toSafetyNet)}`,
             color: c.toSafetyNet === 0 ? T.green : T.text,
           }),
           h(DataRow, {
@@ -263,13 +263,13 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
             value: c.consistencyKnown ? (c.consistencyOk ? 'OK' : 'verletzt') : 'kein Wert erfasst',
             color: c.consistencyKnown ? (c.consistencyOk ? T.green : T.red) : T.amber,
           }),
-          h(DataRow, { label: 'Max. erlaubter Tagesprofit aktuell', value: fmt(c.maxAllowedDay) }),
+          h(DataRow, { label: 'Max. erlaubter Tagesprofit aktuell', value: fmtUsd(c.maxAllowedDay) }),
           c.consistencyKnown && !c.consistencyOk && h(DataRow, {
-            label: 'Gesamtprofit nötig f. Konsistenz', value: fmt(c.neededProfitForConsistency), color: T.amber,
+            label: 'Gesamtprofit nötig f. Konsistenz', value: fmtUsd(c.neededProfitForConsistency), color: T.amber,
           })
         ),
         a.activationFee ? h(DataRow, {
-          label: 'Activation Fee', value: `${fmt(a.activationFee)} · ${paid ? 'bezahlt' : 'offen'}`,
+          label: 'Activation Fee', value: `${fmtUsd(a.activationFee)} · ${paid ? 'bezahlt' : 'offen'}`,
           color: paid ? T.green : T.amber,
         }) : null,
         a.expiryDate ? h(DataRow, {
@@ -294,7 +294,7 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
       h('div', null,
         h(SectionLabel, { style: { marginBottom: 14 } }, 'Laufende Werte'),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 14 } },
-          liveField('Balance live (USD)', balance, setBalance, fmtAlt(parseFloat(balance) || 0, chfRate)),
+          liveField('Balance live (USD)', balance, setBalance),
           liveField('Höchster EOD-Stand (USD)', highWater, setHighWater),
           liveField('Bester Tag (USD)', bestDay, setBestDay)
         ),
@@ -430,7 +430,7 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
           h('input', { type: 'number', value: f.maxContracts, onChange: num('maxContracts'), style: numS() })),
         h(Field, { label: 'Activation Fee (USD)' },
           h('input', { type: 'number', value: f.activationFee, onChange: num('activationFee'), style: numS() }),
-          approxCHF(f.activationFee, chfRate) && h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 6, ...NUM } }, approxCHF(f.activationFee, chfRate)))
+          null)
       ),
       h('label', { style: { display: 'flex', alignItems: 'center', gap: 9, fontSize: 13, color: T.muted, margin: '2px 0 18px', cursor: 'pointer' } },
         h('input', { type: 'checkbox', checked: !!f.activationPaid, onChange: (e) => set('activationPaid', e.target.checked), style: { accentColor: T.accent } }),
@@ -500,7 +500,7 @@ export function ArchiveView({ archived, onRestore, onDelete }) {
       },
         h('div', null,
           h('div', { style: { fontSize: 14.5, fontWeight: 500 } }, a.name),
-          h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, ...NUM } }, `${a.firm} · ${fmt(a.size)}`)
+          h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, ...NUM } }, `${a.firm} · ${fmtUsd(a.size)}`)
         ),
         h('div', null,
           a.archivedAs === 'blown'
@@ -508,7 +508,7 @@ export function ArchiveView({ archived, onRestore, onDelete }) {
             : h('span', { style: { fontSize: 12, fontWeight: 500, color: T.green } }, 'Bestanden')
         ),
         h('div', { style: { textAlign: 'right', fontSize: 14, fontWeight: 500, color: c.profit >= 0 ? T.green : T.red, ...NUM } },
-          (c.profit >= 0 ? '+' : '−') + fmt(Math.abs(c.profit))),
+          (c.profit >= 0 ? '+' : '−') + fmtUsd(Math.abs(c.profit))),
         h('div', { style: { textAlign: 'right', fontSize: 12, color: T.faint, ...NUM } },
           a.archivedAt ? new Date(a.archivedAt).toLocaleDateString('de-CH') : '–'),
         h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end' } },

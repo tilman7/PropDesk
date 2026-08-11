@@ -96,6 +96,15 @@ export function setCurrency(code, rate) {
 }
 export const curCode = () => CUR.code;
 
+// Kontowerte — Balance, High-Water, Trail, Target, Risiko, Gebühren — werden IMMER
+// in USD gezeigt. Es sind die wörtlichen Zahlen aus der Prop-Firm-Plattform; würden
+// sie mit der Anzeigewährung wandern, müsste man sie beim Abgleich zurückrechnen.
+export const fmtUsd = (v, digits = 0) => {
+  if (v == null || v === '' || isNaN(v)) return '–';
+  const n = Number(v);
+  return (n < 0 ? '−' : '') + '$' + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+};
+
 // Eingabefelder für Zahlungen laufen in der Anzeigewährung. Diese beiden
 // rechnen zwischen Feldwert und gespeichertem USD-Betrag um.
 export const toInput = (usdValue) => {

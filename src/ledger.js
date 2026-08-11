@@ -351,6 +351,10 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
   const [armed, setArmed] = useState(false);
   const [docErr, setDocErr] = useState('');
   const [docBusy, setDocBusy] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Activation Fee als zweite Buchung im selben Vorgang, nur bei Ausgaben.
+  const [addFee, setAddFee] = useState(false);
+  const [feeAmount, setFeeAmount] = useState('');
   const set = (k, v) => setT((s) => ({ ...s, [k]: v }));
   const isPayout = t.type === 'payout';
 
@@ -366,6 +370,11 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
     ...s, type,
     category: type === 'payout' ? 'payout' : s.category === 'payout' ? 'eval_fee' : s.category,
   }));
+
+  const selectedAccount = accounts.find((a) => a.id === t.accountId) || null;
+  // Nur sinnvoll, solange die Gebühr offen ist.
+  const feeAccount = selectedAccount && selectedAccount.phase === 'eval'
+    && selectedAccount.activationFee && !selectedAccount.activationPaid ? selectedAccount : null;
 
   const suggested = !isPayout && lastAmounts[t.category] && !t.amount ? toInput(lastAmounts[t.category]) : null;
 
@@ -431,10 +440,71 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
       accounts.length === 0
         ? h('div', { style: { fontSize: 12.5, color: T.faint, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, padding: '11px 12px' } },
             'Noch keine Accounts angelegt — die Zahlung wird ohne Zuordnung gespeichert.')
-        : h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 8 } },
-            h('button', { onClick: () => set('accountId', ''), style: pill(!t.accountId) }, 'Keiner'),
-            accounts.map((a) => h('button', { key: a.id, onClick: () => set('accountId', a.id), style: pill(t.accountId === a.id) },
-              a.name + (a.archived ? ' · Archiv' : ''))))
+        : h('div', null,
+            // Zusammengeklappt: nur die aktuelle Wahl. Bei vielen Accounts sonst eine Wand aus Chips.
+            h('button', {
+              onClick: () => setPickerOpen((o) => !o),
+              style: {
+                width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+                background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6,
+                padding: '11px 12px', fontSize: 13.5, color: selectedAccount ? T.text : T.muted,
+                cursor: 'pointer', fontFamily: SANS, textAlign: 'left',
+              },
+            },
+              h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                selectedAccount ? selectedAccount.name + (selectedAccount.archived ? ' · Archiv' : '') : 'Keinem Account zugeordnet'),
+              h('span', { style: { color: T.faint, fontSize: 11, flexShrink: 0 } }, pickerOpen ? '▲' : '▼')
+            ),
+            pickerOpen && h('div', { style: {
+              display: 'flex', flexDirection: 'column', gap: 1, marginTop: 6,
+              border: `1px solid ${T.border}`, borderRadius: 6, overflow: 'hidden', background: T.border,
+            } },
+              [{ id: '', name: 'Keinem Account zugeordnet' }].concat(accounts).map((a) => h('button', {
+                key: a.id || 'none',
+                onClick: () => { set('accountId', a.id); setPickerOpen(false); },
+                style: {
+                  background: t.accountId === a.id ? T.chipBg : T.surface, border: 'none',
+                  color: t.accountId === a.id ? T.text : T.muted,
+                  padding: '11px 12px', fontSize: 13.5, cursor: 'pointer', fontFamily: SANS,
+                  textAlign: 'left', display: 'flex', justifyContent: 'space-between', gap: 12,
+                },
+              },
+                h('span', { style: { minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+                  a.name + (a.archived ? ' · Archiv' : '')),
+                a.phase === 'eval' ? h('span', { style: { fontSize: 11, color: T.faint, flexShrink: 0 } }, 'Eval') : null
+              ))
+            )
+          )
+    ),
+
+    // Eval-Account gewählt: Activation Fee lässt sich in einem Rutsch mitbuchen.
+    !isPayout && feeAccount && h('div', { style: { marginTop: -4, marginBottom: 16 } },
+      !addFee
+        ? h('button', {
+            onClick: () => { setAddFee(true); setFeeAmount(toInput(feeAccount.activationFee) || ''); },
+            style: {
+              background: 'transparent', border: `1px dashed ${T.border}`, color: T.accent,
+              borderRadius: 6, padding: '10px 13px', fontSize: 12.5, cursor: 'pointer',
+              fontFamily: SANS, width: '100%', textAlign: 'left',
+            },
+          }, `+ Activation Fee für ${feeAccount.name} mitbuchen`)
+        : h('div', { style: { border: `1px solid ${T.border}`, borderRadius: 6, padding: '13px 14px', background: T.surface } },
+            h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 } },
+              h('span', { style: { fontSize: 12.5, color: T.text } }, `Activation Fee · ${feeAccount.name}`),
+              h('button', {
+                onClick: () => { setAddFee(false); setFeeAmount(''); },
+                style: { background: 'none', border: 'none', color: T.muted, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS },
+              }, 'Entfernen')
+            ),
+            h('input', {
+              type: 'number', value: feeAmount, inputMode: 'decimal',
+              onChange: (e) => setFeeAmount(e.target.value === '' ? '' : parseFloat(e.target.value)),
+              placeholder: String(toInput(feeAccount.activationFee) || 0),
+              style: { ...numS(), fontSize: 15 },
+            }),
+            h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 7, lineHeight: 1.5 } },
+              `Wird als zweite Ausgabe in ${curCode()} erfasst und dem Account zugeordnet. Der Account wird als bezahlt markiert.`)
+          )
     ),
 
     h(Field, { label: 'Notiz' },
@@ -481,7 +551,14 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
     h('div', { style: { display: 'flex', gap: 10 } },
       h(Btn, {
         style: { flex: 1 }, disabled: !t.amount || (isPayout && !t.doc) || docBusy,
-        onClick: () => onSubmit({ ...t, id: t.id || uid(), amount: Math.abs(Number(fromInput(t.amount)) || 0) }),
+        onClick: () => onSubmit(
+          { ...t, id: t.id || uid(), amount: Math.abs(Number(fromInput(t.amount)) || 0) },
+          addFee && feeAccount && feeAmount !== ''
+            ? { id: uid(), type: 'expense', category: 'activation',
+                amount: Math.abs(Number(fromInput(feeAmount)) || 0), date: t.date,
+                accountId: feeAccount.id, firm: t.firm || '', note: 'zusammen mit ' + catLabel(t.category) + ' erfasst' }
+            : null
+        ),
       }, initial ? 'Änderungen speichern' : 'Erfassen'),
       initial && h(Danger, {
         armed, onClick: () => (armed ? onDelete(t.id) : setArmed(true)), onBlur: () => setArmed(false),

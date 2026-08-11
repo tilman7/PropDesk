@@ -6,7 +6,7 @@ import { AccountRow, TableHead, AccountDetail, AccountForm, QuickBalance, Archiv
 import { Ledger, TxForm } from './ledger.js';
 import {
   loadData, saveData, loadSettings, saveSettings, findGist, readGist, writeGist,
-  calcAccount, calcLedger, daysUntil, setCurrency, fmt, fmtPct, journalStats, monthLabel,
+  calcAccount, calcLedger, daysUntil, setCurrency, fmt, fmtUsd, fmtPct, journalStats, monthLabel,
   docsTotal, humanBytes, payoutsMissingDoc,
   riskDefault, uid, today,
 } from './lib.js';
@@ -207,9 +207,19 @@ export default function App() {
     setDetailId(null);
   };
 
-  const saveTx = (t) => {
+  // `extra` ist die optionale Activation-Fee-Buchung aus demselben Formular.
+  const saveTx = (t, extra) => {
     const exists = data.transactions.some((x) => x.id === t.id);
-    setTransactions(exists ? data.transactions.map((x) => (x.id === t.id ? t : x)) : [...data.transactions, t]);
+    let transactions = exists
+      ? data.transactions.map((x) => (x.id === t.id ? t : x))
+      : [...data.transactions, t];
+    let accounts = data.accounts;
+    if (extra && extra.amount > 0) {
+      transactions = [...transactions, extra];
+      // Gebühr gebucht heisst: am Account ist sie bezahlt.
+      accounts = accounts.map((a) => (a.id === extra.accountId ? { ...a, activationPaid: true } : a));
+    }
+    commit({ ...data, transactions, accounts });
     setTxEditId(null); setTxAddType(null);
   };
   const deleteTx = (id) => { setTransactions(data.transactions.filter((t) => t.id !== id)); setTxEditId(null); };
@@ -387,7 +397,7 @@ export default function App() {
                   h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: narrow ? 28 : 56, alignItems: 'end' } },
                     h('div', null,
                       h(SectionLabel, null, 'Max. Risiko heute'),
-                      h('div', { style: { ...display(narrow ? 46 : 76), marginTop: narrow ? 10 : 16 } }, fmt(summary.totalRisk)),
+                      h('div', { style: { ...display(narrow ? 46 : 76), marginTop: narrow ? 10 : 16 } }, fmtUsd(summary.totalRisk)),
                       h('div', { style: { fontSize: 13, color: T.muted, marginTop: 14 } },
                         `${active.length} aktive Accounts` + (summary.danger > 0 ? ` · ${summary.danger} Account${summary.danger > 1 ? 's' : ''} ≤ 3 Verlust-Trades` : ''))
                     ),
@@ -402,7 +412,7 @@ export default function App() {
                         summary.nextExpiry && h('div', { style: { fontSize: 11, color: T.faint, marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, summary.nextExpiry.a.name)),
                       h('div', { style: { background: T.bg, padding: '14px 16px' } },
                         h(SectionLabel, null, 'Offene Fees'),
-                        h('div', { style: { ...display(19, summary.openFees > 0 ? T.amber : T.text), marginTop: 9 } }, fmt(summary.openFees))),
+                        h('div', { style: { ...display(19, summary.openFees > 0 ? T.amber : T.text), marginTop: 9 } }, fmtUsd(summary.openFees))),
                       h('div', { style: { background: T.bg, padding: '14px 16px' } },
                         h(SectionLabel, null, 'Netto Finanzen'),
                         h('div', { style: { ...display(19, ledger.net >= 0 ? T.green : T.red), marginTop: 9 } },
@@ -521,8 +531,8 @@ function SettingsView({
         toggle('Erscheinungsbild', theme === 'light' ? 'Hell' : 'Dunkel', onToggleTheme, 'Gilt auf diesem Gerät.'),
         toggle('Anzeigewährung', currency, onToggleCurrency,
           chfRate
-            ? `Kurs USD→CHF ${chfRate.toFixed(3)} · Zahlungen werden in dieser Währung erfasst, Account-Werte bleiben in USD`
-            : 'Zahlungen werden in der gewählten Währung erfasst, Account-Werte bleiben in USD')
+            ? `Kurs USD→CHF ${chfRate.toFixed(3)} · gilt für Zahlungen und Finanzen. Alle Account-Werte bleiben überall in USD.`
+            : 'Gilt für Zahlungen und Finanzen. Alle Account-Werte bleiben überall in USD.')
       )
     ),
 
