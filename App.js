@@ -7,6 +7,7 @@ import { Ledger, TxForm } from './ledger.js';
 import {
   loadData, saveData, loadSettings, saveSettings, findGist, readGist, writeGist,
   calcAccount, calcLedger, daysUntil, setCurrency, fmt, fmtPct, journalStats, monthLabel,
+  docsTotal, humanBytes, payoutsMissingDoc,
   riskDefault, uid, today,
 } from './lib.js';
 
@@ -115,6 +116,7 @@ export default function App() {
 
   const active = useMemo(() => data.accounts.filter((a) => !a.archived), [data.accounts]);
   const archived = useMemo(() => data.accounts.filter((a) => a.archived), [data.accounts]);
+  const breached = useMemo(() => active.filter((a) => calcAccount(a).breached), [active]);
   const ledger = useMemo(() => calcLedger(data.transactions, data.accounts), [data.transactions, data.accounts]);
 
   const lastAmounts = useMemo(() => {
@@ -167,7 +169,7 @@ export default function App() {
       expiryDate: '', activationPaid: false, archived: false, riskPerTrade: riskDefault('pa'),
     };
     const stamp = new Date().toLocaleDateString('de-CH');
-    const old = { ...a, archived: true, archivedAt: Date.now(), notes: (a.notes ? a.notes + '\n' : '') + `Eval bestanden am ${stamp}` };
+    const old = { ...a, archived: true, archivedAt: Date.now(), archivedAs: 'passed', notes: (a.notes ? a.notes + '\n' : '') + `Eval bestanden am ${stamp}` };
     const accounts = data.accounts.map((x) => (x.id === id ? old : x)).concat(funded);
     let transactions = data.transactions;
     const hasActivation = transactions.some((t) => t.accountId === id && t.category === 'activation');
@@ -181,6 +183,18 @@ export default function App() {
     setDetailId(funded.id);
   };
 
+
+  // Blown: Drawdown verletzt. Wandert ins Archiv, bleibt dort wiederherstellbar.
+  const archiveBlown = (id) => {
+    const a = data.accounts.find((x) => x.id === id);
+    if (!a) return;
+    const stamp = new Date().toLocaleDateString('de-CH');
+    setAccounts(data.accounts.map((x) => (x.id === id
+      ? { ...x, archived: true, archivedAt: Date.now(), archivedAs: 'blown',
+          notes: (x.notes ? x.notes + '\n' : '') + `Drawdown verletzt am ${stamp}` }
+      : x)));
+    setDetailId(null);
+  };
   const duplicate = (id) => {
     const a = data.accounts.find((x) => x.id === id);
     if (!a) return;
@@ -359,6 +373,7 @@ export default function App() {
             onEdit: (id) => setEditId(id),
             onDuplicate: duplicate,
             onMoveFunded: moveFunded,
+            onArchiveBlown: archiveBlown,
             onCloseDay: (id, b) => closeDay(id, b),
           })
         : view === 'risk'
@@ -394,6 +409,23 @@ export default function App() {
                           (ledger.net >= 0 ? '+' : '−') + fmt(Math.abs(ledger.net))))
                     )
                   ),
+                  breached.length > 0 && h('div', { style: {
+                    background: T.redSoft, border: `1px solid ${T.red}55`, borderRadius: 6,
+                    padding: narrow ? '15px 16px' : '17px 20px', marginTop: narrow ? 28 : 44,
+                  } },
+                    h('div', { style: { fontSize: 13.5, color: T.red, fontWeight: 600, marginBottom: 4 } },
+                      breached.length === 1 ? 'Ein Account hat das Drawdown-Limit verletzt' : `${breached.length} Accounts haben das Drawdown-Limit verletzt`),
+                    h('div', { style: { fontSize: 12.5, color: T.muted, lineHeight: 1.55, marginBottom: 14 } },
+                      'Ins Archiv verschieben, sobald du die Balance geprüft hast. Von dort ist der Account wiederherstellbar.'),
+                    h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: 9 } },
+                      breached.map((a) => h(Ghost, {
+                        key: a.id,
+                        onClick: () => archiveBlown(a.id),
+                        style: { padding: '9px 14px', fontSize: 12.5, borderColor: `${T.red}66`, color: T.red },
+                      }, `${a.name} als Blown archivieren`))
+                    )
+                  ),
+
                   h('div', { style: { marginTop: narrow ? 34 : 64 } },
                     narrow ? null : h(TableHead, null),
                     active.map((a) => h(AccountRow, { key: a.id, a, onOpen: setDetailId, onQuickBalance: setQuickId }))
@@ -418,6 +450,7 @@ export default function App() {
             : h(SettingsView, {
                 settings, sync, theme, currency, chfRate,
                 monthly: data.monthly || {}, months: ledger.months,
+                docBytes: docsTotal(data.transactions), missingDocs: payoutsMissingDoc(data.transactions),
                 onSetMonthly: setMonthly,
                 onToggleTheme: toggleTheme, onToggleCurrency: toggleCurrency,
                 onConnect: connect, onDisconnect: disconnect,
@@ -442,7 +475,7 @@ export default function App() {
 
 // Ein Bereich für alles Einstellbare: Darstellung, Journal, Sync, Backup.
 function SettingsView({
-  settings, sync, theme, currency, chfRate, monthly, months,
+  settings, sync, theme, currency, chfRate, monthly, months, docBytes, missingDocs,
   onSetMonthly, onToggleTheme, onToggleCurrency, onConnect, onDisconnect, onExport, onImport,
 }) {
   const [token, setToken] = useState(settings.token || '');
@@ -556,6 +589,23 @@ function SettingsView({
           }, busy ? 'Verbinde …' : 'Verbinden & Sync starten'),
           settings.token && h(Ghost, { onClick: onDisconnect, style: { color: T.muted } }, 'Trennen')
         )
+      )
+    ),
+
+    section('Belege', 'Payout-Zertifikate und Rechnungen liegen im Datensatz und synchronisieren über den Gist mit.',
+      h('div', null,
+        h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '13px 0', borderBottom: `1px solid ${T.borderSoft}`, gap: 16, maxWidth: 420 } },
+          h('span', { style: { fontSize: 13, color: T.muted } }, 'Belastung durch Belege'),
+          h('span', { style: { fontSize: 14, fontWeight: 500, color: docBytes > 3 * 1048576 ? T.amber : T.text, ...NUM } }, humanBytes(docBytes || 0))
+        ),
+        missingDocs > 0 && h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', padding: '13px 0', borderBottom: `1px solid ${T.borderSoft}`, gap: 16, maxWidth: 420 } },
+          h('span', { style: { fontSize: 13, color: T.muted } }, 'Payouts ohne Zertifikat'),
+          h('span', { style: { fontSize: 14, fontWeight: 500, color: T.red, ...NUM } }, missingDocs)
+        ),
+        h('div', { style: { fontSize: 12, color: T.faint, marginTop: 12, lineHeight: 1.6, maxWidth: 420 } },
+          docBytes > 3 * 1048576
+            ? 'Über 3 MB. Der Gist-Sync wird spürbar langsamer — alte Belege bei Bedarf entfernen.'
+            : 'Bilder werden beim Hochladen auf max. 1600 px verkleinert.')
       )
     ),
 

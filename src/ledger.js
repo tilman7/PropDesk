@@ -2,7 +2,7 @@
 import React, { useState, useMemo } from 'react';
 import { T, SANS, NUM, display, cap } from './theme.js';
 import { h, useNarrow, inputS, numS, Label, Field, Bar, Modal, ModalHead, Btn, Ghost, Danger, SectionLabel, MetricRow, Empty } from './ui.js';
-import { calcLedger, fmt, fmtAlt, approxCHF, fmtPct, journalStats, CATEGORIES, catLabel, monthKey, monthLabel, today, uid } from './lib.js';
+import { calcLedger, fileToDoc, humanBytes, openDoc, fmt, fmtAlt, approxCHF, fmtPct, journalStats, CATEGORIES, catLabel, monthKey, monthLabel, today, uid } from './lib.js';
 
 const GUTTER = 64;
 
@@ -153,6 +153,8 @@ function TxRow({ t, account, onEdit }) {
     h('div', { style: { minWidth: 0 } },
       h('div', { style: { fontSize: 13.5, color: T.text } },
         catLabel(isPayout ? 'payout' : t.category),
+        t.doc ? h('span', { title: t.doc.name, style: { color: T.faint, marginLeft: 6 } }, '◫') : null,
+        isPayout && !t.doc ? h('span', { style: { color: T.red, marginLeft: 6, fontSize: 11.5 } }, 'Nachweis fehlt') : null,
         t.note ? h('span', { style: { color: T.faint } }, ' · ' + t.note) : null),
       h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', ...NUM } },
         t.date + (narrow && (account || t.firm) ? ' · ' + (account ? account.name : t.firm) : ''))
@@ -344,8 +346,18 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
     amount: '', date: today(), accountId: '', firm: 'Apex', note: '',
   });
   const [armed, setArmed] = useState(false);
+  const [docErr, setDocErr] = useState('');
+  const [docBusy, setDocBusy] = useState(false);
   const set = (k, v) => setT((s) => ({ ...s, [k]: v }));
   const isPayout = t.type === 'payout';
+
+  const pickDoc = async (file) => {
+    if (!file) return;
+    setDocErr(''); setDocBusy(true);
+    try { set('doc', await fileToDoc(file)); }
+    catch (e) { setDocErr(e.message || String(e)); }
+    setDocBusy(false);
+  };
 
   const setType = (type) => setT((s) => ({
     ...s, type,
@@ -420,9 +432,47 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
     h(Field, { label: 'Notiz' },
       h('input', { value: t.note, onChange: (e) => set('note', e.target.value), style: inputS(), placeholder: 'z. B. Promo 80%, Reset nach Breach …' })),
 
+    // Payout ohne Zertifikat wird nicht gespeichert. Bei Ausgaben ist der Beleg freiwillig.
+    h(Field, { label: isPayout ? 'Payout-Zertifikat · erforderlich' : 'Rechnung / Beleg · optional' },
+      t.doc
+        ? h('div', { style: {
+            display: 'flex', alignItems: 'center', gap: 12,
+            border: `1px solid ${T.border}`, borderRadius: 6, padding: '10px 12px', background: T.surface,
+          } },
+            t.doc.type && t.doc.type.startsWith('image/')
+              ? h('img', { src: t.doc.data, alt: '', style: { width: 38, height: 38, objectFit: 'cover', borderRadius: 4, flexShrink: 0 } })
+              : h('div', { style: { width: 38, height: 38, borderRadius: 4, background: T.chipBg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: T.muted, flexShrink: 0 } }, 'PDF'),
+            h('div', { style: { minWidth: 0, flex: 1 } },
+              h('div', { style: { fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, t.doc.name),
+              h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 3 } }, humanBytes(t.doc.size || 0))
+            ),
+            h('button', {
+              onClick: () => openDoc(t.doc),
+              style: { background: 'none', border: 'none', color: T.accent, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, flexShrink: 0 },
+            }, 'Öffnen'),
+            h('button', {
+              onClick: () => set('doc', null),
+              style: { background: 'none', border: 'none', color: T.muted, fontSize: 12.5, cursor: 'pointer', fontFamily: SANS, flexShrink: 0 },
+            }, 'Entfernen')
+          )
+        : h('label', { style: {
+            display: 'block', border: `1px dashed ${isPayout && !t.doc ? T.border : T.border}`, borderRadius: 6,
+            padding: '14px 12px', textAlign: 'center', fontSize: 13, color: T.muted, cursor: 'pointer', background: T.surface,
+          } },
+            docBusy ? 'wird verarbeitet …' : (isPayout ? 'Zertifikat wählen (Bild oder PDF)' : 'Beleg wählen (Bild oder PDF)'),
+            h('input', {
+              type: 'file', accept: 'image/*,application/pdf', style: { display: 'none' },
+              onChange: (e) => { const f = e.target.files && e.target.files[0]; pickDoc(f); e.target.value = ''; },
+            })
+          ),
+      docErr && h('div', { style: { fontSize: 12, color: T.red, marginTop: 8, lineHeight: 1.5 } }, docErr),
+      !docErr && h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 8, lineHeight: 1.5 } },
+        'Bilder werden automatisch verkleinert. Belege synchronisieren über den Gist mit.')
+    ),
+
     h('div', { style: { display: 'flex', gap: 10 } },
       h(Btn, {
-        style: { flex: 1 }, disabled: !t.amount,
+        style: { flex: 1 }, disabled: !t.amount || (isPayout && !t.doc) || docBusy,
         onClick: () => onSubmit({ ...t, id: t.id || uid(), amount: Math.abs(Number(t.amount) || 0) }),
       }, initial ? 'Änderungen speichern' : 'Erfassen'),
       initial && h(Danger, {

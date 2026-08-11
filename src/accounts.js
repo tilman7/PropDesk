@@ -25,7 +25,9 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
   const c = calcAccount(a);
   const bc = bufferColor(c.bufferPct);
   const narrow = useNarrow();
-  const status = c.dayUnclosed
+  const status = c.breached
+    ? { text: 'Drawdown verletzt', color: T.red }
+    : c.dayUnclosed
     ? { text: 'Tag offen', color: T.amber }
     : c.expiryDays !== null && c.expiryDays <= 7
       ? { text: c.expiryDays <= 0 ? 'abgelaufen' : `läuft ab in ${c.expiryDays}d`, color: T.red }
@@ -115,7 +117,7 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
 }
 
 // Vollflächige Detailseite statt Dialog.
-export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate, onMoveFunded, onCloseDay, chfRate, ledgerForAccount }) {
+export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate, onMoveFunded, onArchiveBlown, onCloseDay, chfRate, ledgerForAccount }) {
   const c = calcAccount(a);
   const [notes, setNotes] = useState(a.notes || '');
   const [balance, setBalance] = useState(String(a.balance));
@@ -216,7 +218,21 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
       }, `Tag mit ${fmt(parseFloat(balance) || 0)} abschliessen`)
     ),
 
-    a.phase === 'eval' && c.passed && h('div', { style: {
+    c.breached && h('div', { style: {
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20,
+      background: T.redSoft, border: `1px solid ${T.red}55`, borderRadius: 6,
+      padding: '16px 18px', marginTop: 20, flexWrap: 'wrap',
+    } },
+      h('div', { style: { minWidth: 0 } },
+        h('div', { style: { fontSize: 13.5, color: T.red, fontWeight: 600 } }, 'Drawdown-Limit verletzt'),
+        h('div', { style: { fontSize: 12.5, color: T.muted, marginTop: 5, lineHeight: 1.5 } },
+          `Balance ${fmt(c.balance)} liegt auf oder unter dem Drawdown-Level ${fmt(c.ddLevel)}. Der Account ist blown.`)
+      ),
+      h(Btn, { onClick: () => onArchiveBlown(a.id), style: { background: T.red, borderColor: T.red, color: '#fff' } },
+        'Als Blown archivieren')
+    ),
+
+    a.phase === 'eval' && c.passed && !c.breached && h('div', { style: {
       display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20,
       background: T.greenSoft, border: `1px solid ${T.green}44`, borderRadius: 6,
       padding: '16px 18px', marginTop: 20, flexWrap: 'wrap',
@@ -486,7 +502,11 @@ export function ArchiveView({ archived, onRestore, onDelete }) {
           h('div', { style: { fontSize: 14.5, fontWeight: 500 } }, a.name),
           h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 4, ...NUM } }, `${a.firm} · ${fmt(a.size)}`)
         ),
-        h('div', null, h(PhaseTag, { phase: a.phase })),
+        h('div', null,
+          a.archivedAs === 'blown'
+            ? h('span', { style: { fontSize: 12, fontWeight: 500, color: T.red } }, 'Blown')
+            : h('span', { style: { fontSize: 12, fontWeight: 500, color: T.green } }, 'Bestanden')
+        ),
         h('div', { style: { textAlign: 'right', fontSize: 14, fontWeight: 500, color: c.profit >= 0 ? T.green : T.red, ...NUM } },
           (c.profit >= 0 ? '+' : '−') + fmt(Math.abs(c.profit))),
         h('div', { style: { textAlign: 'right', fontSize: 12, color: T.faint, ...NUM } },

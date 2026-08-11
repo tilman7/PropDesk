@@ -97,9 +97,11 @@ export function setCurrency(code, rate) {
 export const fmt = (v, digits = 0) => {
   if (v == null || v === '' || isNaN(v)) return '–';
   const n = Number(v) * CUR.rate;
+  const sign = n < 0 ? '−' : '';
+  const abs = Math.abs(n);
   return CUR.code === 'CHF'
-    ? 'CHF ' + n.toLocaleString('de-CH', { minimumFractionDigits: digits, maximumFractionDigits: digits })
-    : '$' + n.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+    ? sign + 'CHF ' + abs.toLocaleString('de-CH', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+    : sign + '$' + abs.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 };
 
 // Der jeweils andere Betrag, als Nebenzeile.
@@ -115,6 +117,84 @@ export const approxCHF = (v, rate) =>
   v == null || v === '' || isNaN(v) || Number(v) === 0
     ? ''
     : '≈ CHF ' + (Number(v) * (rate || CHF_FALLBACK)).toLocaleString('de-CH', { maximumFractionDigits: 0 });
+
+/* --------------------------- Belege / Nachweise ---------------------------
+   Dokumente liegen als Data-URL im Datensatz und wandern damit durch den Gist.
+   Bilder werden vorher verkleinert, sonst sprengt ein Foto den Speicher. */
+
+export const MAX_DOC_BYTES = 900 * 1024;   // nach der Komprimierung
+const IMG_MAX_EDGE = 1600;
+const IMG_QUALITY = 0.72;
+
+export const docBytes = (doc) => (doc && doc.data ? Math.round((doc.data.length - (doc.data.indexOf(',') + 1)) * 0.75) : 0);
+
+export const humanBytes = (n) =>
+  n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+
+const readAsDataURL = (file) => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(r.result);
+  r.onerror = () => rej(new Error('Datei konnte nicht gelesen werden'));
+  r.readAsDataURL(file);
+});
+
+const shrinkImage = (dataUrl) => new Promise((res, rej) => {
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, IMG_MAX_EDGE / Math.max(img.width, img.height));
+    const w = Math.round(img.width * scale);
+    const h = Math.round(img.height * scale);
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, w, h);
+    ctx.drawImage(img, 0, 0, w, h);
+    res(cv.toDataURL('image/jpeg', IMG_QUALITY));
+  };
+  img.onerror = () => rej(new Error('Bild konnte nicht gelesen werden'));
+  img.src = dataUrl;
+});
+
+// Wandelt eine Datei in einen speicherbaren Beleg. Wirft bei zu grossen Dateien.
+export async function fileToDoc(file) {
+  const raw = await readAsDataURL(file);
+  const isImage = (file.type || '').startsWith('image/');
+  const data = isImage ? await shrinkImage(raw) : raw;
+  const doc = {
+    name: file.name || 'Beleg',
+    type: isImage ? 'image/jpeg' : file.type || 'application/octet-stream',
+    data,
+    addedAt: Date.now(),
+  };
+  doc.size = docBytes(doc);
+  if (doc.size > MAX_DOC_BYTES) {
+    throw new Error(
+      `Datei ist nach der Komprimierung ${humanBytes(doc.size)} gross — erlaubt sind ${humanBytes(MAX_DOC_BYTES)}. ` +
+      (isImage ? 'Mach einen kleineren Ausschnitt.' : 'Speichere das PDF kleiner oder als Screenshot.')
+    );
+  }
+  return doc;
+}
+
+// Gesamtgrösse aller Belege — der Gist und localStorage sind endlich.
+export const docsTotal = (transactions = []) =>
+  transactions.reduce((sum, t) => sum + (t.doc ? t.doc.size || docBytes(t.doc) : 0), 0);
+
+export const payoutsMissingDoc = (transactions = []) =>
+  transactions.filter((t) => t.type === 'payout' && !t.doc).length;
+
+export const openDoc = (doc) => {
+  if (!doc || !doc.data) return;
+  const w = window.open();
+  if (!w) return;
+  w.document.write(
+    doc.type === 'application/pdf'
+      ? `<iframe src="${doc.data}" style="border:0;position:fixed;inset:0;width:100%;height:100%"></iframe>`
+      : `<img src="${doc.data}" style="max-width:100%;display:block;margin:0 auto">`
+  );
+  w.document.title = doc.name || 'Beleg';
+};
 
 export const today = () => new Date().toISOString().slice(0, 10);
 export const monthKey = (d) => (d || '').slice(0, 7);
@@ -171,7 +251,7 @@ export function calcAccount(a) {
   const buffer = balance - ddLevel;
   const bufferAfterClose = balance - pending.level;
   const risk = Number(a.riskPerTrade) || 0;
-  const lossesLeft = risk > 0 ? Math.floor(buffer / risk) : null;
+  const lossesLeft = risk > 0 ? Math.max(0, Math.floor(buffer / risk)) : null;
   const bufferPct = trail > 0 ? Math.max(0, Math.min(1, buffer / trail)) : 0;
 
   const target = Number(a.target) || 0;
@@ -199,6 +279,8 @@ export function calcAccount(a) {
     safetyNet, toSafetyNet, safetyNetPct,
     expiryDays: daysUntil(a.expiryDate),
     passed: a.phase === 'eval' && target > 0 && profit >= target,
+    // Drawdown verletzt: die Balance liegt auf oder unter dem Trailing-Level.
+    breached: balance <= ddLevel,
   };
 }
 

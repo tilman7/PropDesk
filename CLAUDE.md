@@ -52,6 +52,16 @@ Laden seine Daten.
 Prozentwert aus dem Trading-Journal. Rein statistisch — dieser Wert darf in keine Geld-,
 Drawdown- oder Risikorechnung einfliessen.
 
+**Blown-Accounts.** `calcAccount().breached` ist wahr, sobald die Balance auf oder unter
+dem Drawdown-Level liegt. Archiviert wird nie automatisch, sondern über einen Klick —
+die Balance ist manuell erfasst, ein Tippfehler darf keinen Account wegräumen.
+`archivedAs` ist `'passed'` oder `'blown'`; fehlt das Feld, gilt der Account als bestanden.
+
+**Belege.** Payouts erfordern ein Zertifikat, Ausgaben nicht. Dokumente liegen als
+Data-URL unter `transaction.doc` und wandern durch den Gist — deshalb werden Bilder in
+`fileToDoc()` auf 1600 px verkleinert und alles über `MAX_DOC_BYTES` abgelehnt. Diese
+Grenze nicht anheben, ohne den Sync mit echten Datenmengen zu prüfen.
+
 **Kein `localStorage`-Key umbenennen** (`riskdesk:data`, `riskdesk:settings`) und die
 Gist-Beschreibung `RiskDesk Sync Data` nicht ändern — daran findet die App ihren Gist wieder.
 Die App heisst seit v9 PropDesk; diese beiden technischen Bezeichner bleiben bewusst alt,
