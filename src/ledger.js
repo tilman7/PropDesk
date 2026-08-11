@@ -352,6 +352,8 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
   const [docErr, setDocErr] = useState('');
   const [docBusy, setDocBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Anzahl gleicher Ausgaben in einem Vorgang (z. B. drei Evals am selben Tag gekauft).
+  const [qty, setQty] = useState(1);
   // Activation Fee als zweite Buchung im selben Vorgang, nur bei Ausgaben.
   const [addFee, setAddFee] = useState(false);
   const [feeAmount, setFeeAmount] = useState('');
@@ -422,6 +424,27 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
           style: { background: 'none', border: 'none', color: T.accent, fontSize: 11.5, cursor: 'pointer', fontFamily: SANS, padding: 0, whiteSpace: 'nowrap' },
         }, `zuletzt ${fmt(fromInput(suggested))} übernehmen`)
       )
+    ),
+
+    // Mehrfach: legt qty identische Buchungen an. Nur beim Neuerfassen von Ausgaben —
+    // Payouts hängen je an einem eigenen Zertifikat, Bearbeiten betrifft eine Buchung.
+    !isPayout && !initial && h(Field, { label: 'Anzahl' },
+      h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+        [1, 2, 3, 4, 5].map((n) => h('button', {
+          key: n, onClick: () => setQty(n), style: { ...pill(qty === n), minWidth: 42, textAlign: 'center' },
+        }, String(n))),
+        h('input', {
+          type: 'number', min: 1, max: 20, value: qty, inputMode: 'numeric',
+          onChange: (e) => {
+            const n = parseInt(e.target.value, 10);
+            setQty(isNaN(n) ? 1 : Math.min(20, Math.max(1, n)));
+          },
+          style: { ...numS(), width: 68, padding: '8px 10px', fontSize: 13 },
+        })
+      ),
+      qty > 1 && h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 8, lineHeight: 1.55 } },
+        `${qty} Buchungen à ${fmt(fromInput(t.amount) || 0)} · zusammen ${fmt((fromInput(t.amount) || 0) * qty)}. ` +
+        'Nummeriert als 1/' + qty + ' bis ' + qty + '/' + qty + '; der Beleg hängt an der ersten, die übrigen kannst du einzeln nachreichen.')
     ),
 
     !isPayout && h(Field, { label: 'Kategorie' },
@@ -551,15 +574,29 @@ export function TxForm({ initial, defaultType = 'expense', accounts, lastAmounts
     h('div', { style: { display: 'flex', gap: 10 } },
       h(Btn, {
         style: { flex: 1 }, disabled: !t.amount || (isPayout && !t.doc) || docBusy,
-        onClick: () => onSubmit(
-          { ...t, id: t.id || uid(), amount: Math.abs(Number(fromInput(t.amount)) || 0) },
-          addFee && feeAccount && feeAmount !== ''
-            ? { id: uid(), type: 'expense', category: 'activation',
-                amount: Math.abs(Number(fromInput(feeAmount)) || 0), date: t.date,
-                accountId: feeAccount.id, firm: t.firm || '', note: 'zusammen mit ' + catLabel(t.category) + ' erfasst' }
-            : null
-        ),
-      }, initial ? 'Änderungen speichern' : 'Erfassen'),
+        onClick: () => {
+          const amount = Math.abs(Number(fromInput(t.amount)) || 0);
+          const n = isPayout || initial ? 1 : qty;
+          const tag = (i) => (n > 1 ? `${i + 1}/${n}` : '');
+          const withTag = (note, i) => (n > 1 ? (note ? `${note} · ${tag(i)}` : tag(i)) : note);
+          // Der Beleg bleibt an der ersten Buchung, die Kopien gehen ohne.
+          const primary = { ...t, id: t.id || uid(), amount, note: withTag(t.note, 0) };
+          const copies = [];
+          for (let i = 1; i < n; i++) {
+            copies.push({ ...t, id: uid(), amount, doc: null, note: withTag(t.note, i) });
+          }
+          const extras = copies;
+          if (addFee && feeAccount && feeAmount !== '') {
+            extras.push({
+              id: uid(), type: 'expense', category: 'activation',
+              amount: Math.abs(Number(fromInput(feeAmount)) || 0), date: t.date,
+              accountId: feeAccount.id, firm: t.firm || '',
+              note: 'zusammen mit ' + catLabel(t.category) + ' erfasst',
+            });
+          }
+          onSubmit(primary, extras);
+        },
+      }, initial ? 'Änderungen speichern' : (!isPayout && qty > 1 ? `${qty}× erfassen` : 'Erfassen')),
       initial && h(Danger, {
         armed, onClick: () => (armed ? onDelete(t.id) : setArmed(true)), onBlur: () => setArmed(false),
       }, armed ? 'Sicher?' : 'Löschen')

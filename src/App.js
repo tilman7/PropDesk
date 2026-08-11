@@ -207,17 +207,21 @@ export default function App() {
     setDetailId(null);
   };
 
-  // `extra` ist die optionale Activation-Fee-Buchung aus demselben Formular.
-  const saveTx = (t, extra) => {
+  // `extras` sind weitere Buchungen aus demselben Formular: Kopien bei Anzahl > 1
+  // und die optionale Activation Fee.
+  const saveTx = (t, extras = []) => {
     const exists = data.transactions.some((x) => x.id === t.id);
     let transactions = exists
       ? data.transactions.map((x) => (x.id === t.id ? t : x))
       : [...data.transactions, t];
     let accounts = data.accounts;
-    if (extra && extra.amount > 0) {
-      transactions = [...transactions, extra];
+    for (const x of extras) {
+      if (!x || !(x.amount > 0)) continue;
+      transactions = [...transactions, x];
       // Gebühr gebucht heisst: am Account ist sie bezahlt.
-      accounts = accounts.map((a) => (a.id === extra.accountId ? { ...a, activationPaid: true } : a));
+      if (x.category === 'activation' && x.accountId) {
+        accounts = accounts.map((a) => (a.id === x.accountId ? { ...a, activationPaid: true } : a));
+      }
     }
     commit({ ...data, transactions, accounts });
     setTxEditId(null); setTxAddType(null);

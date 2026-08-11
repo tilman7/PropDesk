@@ -66,8 +66,14 @@ die Balance ist manuell erfasst, ein Tippfehler darf keinen Account wegräumen.
 
 **Activation Fee im Zahlungsformular.** Ist einem Ausgaben-Eintrag ein Eval-Account mit
 offener Gebühr zugeordnet, lässt sich die Fee als zweite Buchung mitgeben. `TxForm` ruft
-dann `onSubmit(tx, extra)`; `saveTx()` legt beide Buchungen an und setzt `activationPaid`
-am Account. Der zweite Parameter ist optional — bestehende Aufrufe bleiben gültig.
+generell `onSubmit(tx, extras)` mit einer Liste weiterer Buchungen — Kopien aus dem
+Anzahl-Feld und die Fee. `saveTx()` legt alle an und setzt `activationPaid` am Account,
+sobald eine `activation`-Buchung dabei ist.
+
+**Anzahl bei Ausgaben.** `qty > 1` legt identische Buchungen an, nummeriert `1/n` … `n/n`
+in der Notiz. Der Beleg bleibt an der ersten, die Kopien bekommen `doc: null` — sonst läge
+dieselbe Datei mehrfach im Gist. Nur beim Neuerfassen von Ausgaben sichtbar: Payouts hängen
+je an einem eigenen Zertifikat, und Bearbeiten betrifft immer genau eine Buchung.
 
 **Belege.** Payouts erfordern ein Zertifikat, Ausgaben nicht. Dokumente liegen als
 Data-URL unter `transaction.doc` und wandern durch den Gist — deshalb werden Bilder in
