@@ -44,6 +44,16 @@ export const PRESETS = {
 const RISK_DEFAULTS = { eval: 400, pa: 250, live: 250 };
 export const riskDefault = (phase) => RISK_DEFAULTS[phase] ?? 250;
 
+// Dynamisches Risiko ("N/X-System"): Risiko = Puffer bis Drawdown ÷ N, auf $25
+// gerundet, mit einer Untergrenze. Ersetzt bei Bedarf das fixe `riskPerTrade`.
+// Default-Divisor aus dem Tradingplan (Kapitel 10.2, hergeleitet über mehrere
+// Anbieter/Zeiträume/Seeds — das höchste N, das keinen Median kostet).
+export const RISK_DIVISOR_DEFAULT = 6;
+// Qualifying-Day-Untergrenze je Firma: ein Gewinntrade unter diesem Betrag zählt
+// bei manchen Anbietern nicht als Handelstag. Nur ein Vorschlag fürs Formular —
+// `riskMin` bleibt frei editierbar.
+export const riskMinSuggestion = (firm) => (firmId(firm) === 'apex' ? 125 : 75);
+
 export const CATEGORIES = [
   { id: 'eval_fee', label: 'Eval-Gebühr' },
   { id: 'reset', label: 'Reset' },
@@ -302,7 +312,16 @@ export function calcAccount(a) {
 
   const buffer = balance - ddLevel;
   const bufferAfterClose = balance - pending.level;
-  const risk = Number(a.riskPerTrade) || 0;
+
+  // Risiko pro Trade: 'fix' (manuell gesetzt) oder 'dynamic' (Puffer ÷ N,
+  // gerundet auf $25, mit Untergrenze). Alte Accounts ohne riskMode bleiben
+  // auf 'fix' — bestehende Daten und Verhalten ändern sich nicht.
+  const riskDivisor = Number(a.riskDivisor) || RISK_DIVISOR_DEFAULT;
+  const riskMin = Number(a.riskMin) || 0;
+  const risk = a.riskMode === 'dynamic'
+    ? (buffer > 0 ? Math.max(riskMin, Math.round(buffer / riskDivisor / 25) * 25) : 0)
+    : (Number(a.riskPerTrade) || 0);
+
   const lossesLeft = risk > 0 ? Math.max(0, Math.floor(buffer / risk)) : null;
   const bufferPct = trail > 0 ? Math.max(0, Math.min(1, buffer / trail)) : 0;
 
@@ -325,7 +344,7 @@ export function calcAccount(a) {
     balance, start, trail, highWater, profit,
     ddLevel, ddLocked, pendingDdLevel: pending.level, dayUnclosed,
     buffer, bufferAfterClose, bufferPct,
-    lossesLeft, risk,
+    lossesLeft, risk, riskDivisor, riskMin,
     target, targetProgress, toTarget,
     bestDay, maxAllowedDay, consistencyOk, consistencyKnown, neededProfitForConsistency,
     safetyNet, toSafetyNet, safetyNetPct,

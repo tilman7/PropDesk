@@ -8,7 +8,7 @@ import {
   loadData, saveData, loadSettings, saveSettings, findGist, readGist, writeGist,
   calcAccount, calcLedger, daysUntil, setCurrency, fmt, fmtUsd, fmtPct, journalStats, monthLabel,
   docsTotal, humanBytes, payoutsMissingDoc,
-  riskDefault, uid, today,
+  riskDefault, riskMinSuggestion, RISK_DIVISOR_DEFAULT, uid, today,
 } from './lib.js';
 
 const SYNC_COLOR = { off: 'faint', idle: 'faint', syncing: 'amber', synced: 'green', error: 'red' };
@@ -130,7 +130,7 @@ export default function App() {
   const summary = useMemo(() => {
     if (active.length === 0) return null;
     const evals = active.filter((a) => a.phase === 'eval').length;
-    const totalRisk = active.reduce((s, a) => s + (Number(a.riskPerTrade) || 0), 0);
+    const totalRisk = active.reduce((s, a) => s + calcAccount(a).risk, 0);
     const nextExpiry = active.map((a) => ({ a, d: daysUntil(a.expiryDate) }))
       .filter((x) => x.d !== null).sort((x, y) => x.d - y.d)[0] || null;
     const openFees = active.filter((a) => a.activationFee && !a.activationPaid)
@@ -167,6 +167,9 @@ export default function App() {
       ...a, id: uid(), name: `${a.name} · PA`, phase: 'pa',
       balance: start, highWater: start, bestDayProfit: 0, consistencyPct: 50,
       expiryDate: '', activationPaid: false, archived: false, riskPerTrade: riskDefault('pa'),
+      // Tradingplan Kapitel 5: die dynamische Regel greift ab Aktivierung des PA.
+      // Bleibt jederzeit im Formular auf 'fix' umstellbar.
+      riskMode: 'dynamic', riskDivisor: RISK_DIVISOR_DEFAULT, riskMin: riskMinSuggestion(a.firm),
     };
     const stamp = new Date().toLocaleDateString('de-CH');
     const old = { ...a, archived: true, archivedAt: Date.now(), archivedAs: 'passed', notes: (a.notes ? a.notes + '\n' : '') + `Eval bestanden am ${stamp}` };

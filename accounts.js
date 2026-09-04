@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { T, SANS, NUM, display, cap } from './theme.js';
 import { h, useNarrow, FirmMark, inputS, numS, Label, Field, Bar, Chip, PhaseTag, DataRow, Modal, ModalHead, Btn, Ghost, Danger, SectionLabel, ColHead, Panel } from './ui.js';
-import { calcAccount, fmt, fmtUsd, PRESETS, FIRMS, firmId, firmLabel, riskDefault, uid } from './lib.js';
+import { calcAccount, fmt, fmtUsd, PRESETS, FIRMS, firmId, firmLabel, riskDefault, riskMinSuggestion, RISK_DIVISOR_DEFAULT, uid } from './lib.js';
 
 const bufferColor = (pct) => (pct > 0.5 ? T.green : pct > 0.25 ? T.amber : T.red);
 export const COLS = '1.6fr 0.8fr 0.9fr 1.5fr 0.7fr 1.1fr';
@@ -182,7 +182,9 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
     } },
       h('div', { style: { background: T.bg, padding: '20px 22px 22px' } },
         h(SectionLabel, null, 'Max. Risiko / Trade'),
-        h('div', { style: { ...display(40), marginTop: 12 } }, fmtUsd(c.risk))
+        h('div', { style: { ...display(40), marginTop: 12 } }, fmtUsd(c.risk)),
+        a.riskMode === 'dynamic' && h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 10, ...NUM } },
+          `Dynamisch · Puffer ÷ ${c.riskDivisor}${c.riskMin ? ` · min ${fmtUsd(c.riskMin)}` : ''}`)
       ),
       h('div', { style: { background: T.bg, padding: '20px 22px 22px' } },
         h(SectionLabel, null, 'Puffer bis Drawdown'),
@@ -252,6 +254,12 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
         h(DataRow, { label: `Drawdown-Level ${c.ddLocked ? '(gelockt)' : '(EOD trailing)'}`, value: fmtUsd(c.ddLevel) }),
         h(DataRow, { label: 'Höchster EOD-Stand', value: fmtUsd(c.highWater) }),
         h(DataRow, { label: 'Trailing Drawdown', value: fmtUsd(c.trail) }),
+        h(DataRow, {
+          label: 'Risiko-Modus',
+          value: a.riskMode === 'dynamic'
+            ? `Dynamisch · Puffer ÷ ${c.riskDivisor}${c.riskMin ? ` · min ${fmtUsd(c.riskMin)}` : ''}`
+            : 'Fix',
+        }),
         a.dll ? h(DataRow, { label: 'Daily Loss Limit', value: fmtUsd(a.dll) }) : null,
         a.phase === 'eval' && h(DataRow, { label: 'Profit-Target', value: `${fmtUsd(c.profit)} / ${fmtUsd(c.target)}` }),
         a.phase === 'eval' && h(DataRow, { label: 'Bis Profit-Target', value: fmtUsd(c.toTarget) }),
@@ -329,6 +337,7 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
     name: '', firm: '', size: 50000, phase: 'eval',
     startBalance: 50000, balance: 50000, highWater: 50000,
     trail: 2000, target: 3000, dll: 1000, riskPerTrade: riskDefault('eval'),
+    riskMode: 'fix', riskDivisor: RISK_DIVISOR_DEFAULT, riskMin: '',
     maxContracts: 6, consistencyPct: 50, bestDayProfit: 0,
     activationFee: 0, activationPaid: false, expiryDate: '', notes: '',
   });
@@ -374,6 +383,27 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
       fontSize: 13, fontWeight: f.phase === id ? 500 : 400, cursor: 'pointer', fontFamily: SANS,
     },
   }, label);
+
+  // Risiko-Modus: fix (manueller Betrag) oder dynamisch (Puffer ÷ N, N/X-System
+  // aus dem Tradingplan). Beim Wechsel auf dynamisch Divisor/Minimum vorbelegen,
+  // falls noch leer — nichts überschreiben, das schon gesetzt ist.
+  const riskMode = f.riskMode || 'fix';
+  const setRiskMode = (mode) => setF((s) => ({
+    ...s,
+    riskMode: mode,
+    riskDivisor: mode === 'dynamic' && !s.riskDivisor ? RISK_DIVISOR_DEFAULT : s.riskDivisor,
+    riskMin: mode === 'dynamic' && (s.riskMin === '' || s.riskMin === undefined) ? riskMinSuggestion(s.firm) : s.riskMin,
+  }));
+  const riskSeg = (id, label) => h('button', {
+    key: id, onClick: () => setRiskMode(id),
+    style: {
+      flex: 1, background: riskMode === id ? T.chipBg : 'transparent',
+      border: `1px solid ${riskMode === id ? T.text : T.border}`,
+      color: riskMode === id ? T.text : T.muted, borderRadius: 6, padding: '10px 0',
+      fontSize: 13, fontWeight: riskMode === id ? 500 : 400, cursor: 'pointer', fontFamily: SANS,
+    },
+  }, label);
+  const riskPreview = riskMode === 'dynamic' ? calcAccount(f) : null;
 
   const two = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0 16px' };
 
@@ -428,15 +458,30 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
       h('div', { style: { display: 'flex', gap: 8 } }, seg('eval', 'Evaluation'), seg('pa', 'PA / Funded'), seg('live', 'Live'))
     ),
 
+    h(Field, { label: 'Risiko-Modus' },
+      h('div', { style: { display: 'flex', gap: 8 } }, riskSeg('fix', 'Fix'), riskSeg('dynamic', 'Dynamisch (Puffer ÷ N)'))
+    ),
+
     h('div', { style: two },
       h(Field, { label: 'Name' },
         h('input', { value: f.name, onChange: (e) => set('name', e.target.value), style: inputS(), placeholder: 'z. B. Apex EOD 50K #1' })),
-      h(Field, { label: `Max. Risiko pro Trade (USD) · Standard $${riskDefault(f.phase)}` },
-        h('input', { type: 'number', value: f.riskPerTrade, onChange: num('riskPerTrade'), style: { ...numS(), borderColor: T.text } })),
+      riskMode === 'dynamic'
+        ? [
+            h(Field, { key: 'riskDivisor', label: `Divisor N (Standard ${RISK_DIVISOR_DEFAULT})` },
+              h('input', { type: 'number', value: f.riskDivisor, onChange: num('riskDivisor'), style: { ...numS(), borderColor: T.text } })),
+            h(Field, { key: 'riskMin', label: 'Minimum pro Trade (USD)' },
+              h('input', { type: 'number', value: f.riskMin, onChange: num('riskMin'), style: numS() })),
+          ]
+        : h(Field, { key: 'riskFix', label: `Max. Risiko pro Trade (USD) · Standard $${riskDefault(f.phase)}` },
+            h('input', { type: 'number', value: f.riskPerTrade, onChange: num('riskPerTrade'), style: { ...numS(), borderColor: T.text } })),
       h(Field, { label: 'Aktuelle Balance (USD)' },
         h('input', { type: 'number', value: f.balance, onChange: num('balance'), style: numS() })),
       h(Field, { label: 'Account läuft ab am' },
         h('input', { type: 'date', value: f.expiryDate || '', onChange: (e) => set('expiryDate', e.target.value), style: inputS() }))
+    ),
+
+    riskPreview && h('div', { style: { fontSize: 11.5, color: T.faint, margin: '-8px 0 16px', ...NUM } },
+      `Aktuell: ${fmtUsd(riskPreview.risk)} bei Puffer ${fmtUsd(riskPreview.buffer)} (Puffer ÷ ${f.riskDivisor || RISK_DIVISOR_DEFAULT}${f.riskMin ? `, min ${fmtUsd(f.riskMin)}` : ''})`
     ),
 
     h('button', {
