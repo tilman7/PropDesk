@@ -71,6 +71,13 @@ einer Themefarbe. Deshalb müssen die Dateien in `src/logos.js` reine Alphamaske
 (RGB weiss, Form im Alphakanal) — ein farbiges Logo mit weissem Hintergrund würde als
 weisser Klotz erscheinen.
 
+**Risiko-Modus.** Pro Account `riskMode: 'fix' | 'dynamic'`. Fix nutzt `riskPerTrade`.
+Dynamisch rechnet `dynamicRisk()` in `src/lib.js`: Puffer bis MLL ÷ `riskDivisor`, auf $25
+gerundet, mindestens `riskMin` (leer = keine Untergrenze) — aber **nie mehr als der
+verbleibende Puffer**. `lossesLeft` spielt im dynamischen Modus eine Serie voller Verluste
+durch, weil das Risiko mit dem Puffer schrumpft. Accounts ohne `riskMode` gelten als fix.
+Alle Anzeigen nehmen `calcAccount().risk`, nie `riskPerTrade` direkt.
+
 **Blown-Accounts.** `calcAccount().breached` ist wahr, sobald die Balance auf oder unter
 dem Drawdown-Level liegt. Archiviert wird nie automatisch, sondern über einen Klick —
 die Balance ist manuell erfasst, ein Tippfehler darf keinen Account wegräumen.

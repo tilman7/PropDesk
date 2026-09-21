@@ -44,15 +44,24 @@ export const PRESETS = {
 const RISK_DEFAULTS = { eval: 400, pa: 250, live: 250 };
 export const riskDefault = (phase) => RISK_DEFAULTS[phase] ?? 250;
 
-// Dynamisches Risiko ("N/X-System"): Risiko = Puffer bis Drawdown ÷ N, auf $25
-// gerundet, mit einer Untergrenze. Ersetzt bei Bedarf das fixe `riskPerTrade`.
-// Default-Divisor aus dem Tradingplan (Kapitel 10.2, hergeleitet über mehrere
-// Anbieter/Zeiträume/Seeds — das höchste N, das keinen Median kostet).
+// Dynamisches Risiko ("N/X-System"): Risiko = Puffer bis MLL ÷ N, auf $25
+// gerundet, mit optionaler Untergrenze. Ersetzt pro Account das fixe `riskPerTrade`.
+// Default-Divisor aus dem Tradingplan (Kapitel 10.2).
 export const RISK_DIVISOR_DEFAULT = 6;
+export const RISK_STEP = 25;
 // Qualifying-Day-Untergrenze je Firma: ein Gewinntrade unter diesem Betrag zählt
 // bei manchen Anbietern nicht als Handelstag. Nur ein Vorschlag fürs Formular —
-// `riskMin` bleibt frei editierbar.
+// `riskMin` bleibt frei editierbar, leer = keine Untergrenze.
 export const riskMinSuggestion = (firm) => (firmId(firm) === 'apex' ? 125 : 75);
+
+// Das Risiko liegt nie über dem verbleibenden Puffer — auch nicht, wenn die
+// Untergrenze höher wäre. Sonst würde ein Verlusttrade den Account unter den MLL drücken.
+export function dynamicRisk(buffer, divisor, min = 0) {
+  if (!(buffer > 0)) return 0;
+  const n = Math.max(1, Number(divisor) || RISK_DIVISOR_DEFAULT);
+  const raw = Math.round(buffer / n / RISK_STEP) * RISK_STEP;
+  return Math.min(buffer, Math.max(Number(min) || 0, raw));
+}
 
 export const CATEGORIES = [
   { id: 'eval_fee', label: 'Eval-Gebühr' },
@@ -313,16 +322,27 @@ export function calcAccount(a) {
   const buffer = balance - ddLevel;
   const bufferAfterClose = balance - pending.level;
 
-  // Risiko pro Trade: 'fix' (manuell gesetzt) oder 'dynamic' (Puffer ÷ N,
-  // gerundet auf $25, mit Untergrenze). Alte Accounts ohne riskMode bleiben
-  // auf 'fix' — bestehende Daten und Verhalten ändern sich nicht.
-  const riskDivisor = Number(a.riskDivisor) || RISK_DIVISOR_DEFAULT;
-  const riskMin = Number(a.riskMin) || 0;
-  const risk = a.riskMode === 'dynamic'
-    ? (buffer > 0 ? Math.max(riskMin, Math.round(buffer / riskDivisor / 25) * 25) : 0)
-    : (Number(a.riskPerTrade) || 0);
+  // Risiko pro Trade: 'fix' (manuell gesetzt) oder 'dynamic' (Puffer bis MLL ÷ N).
+  // Alte Accounts ohne riskMode bleiben auf 'fix' — Daten und Verhalten unverändert.
+  const riskDivisor = Math.max(1, Number(a.riskDivisor) || RISK_DIVISOR_DEFAULT);
+  const riskMin = Math.max(0, Number(a.riskMin) || 0);
+  const dynamic = a.riskMode === 'dynamic';
+  const risk = dynamic ? dynamicRisk(buffer, riskDivisor, riskMin) : (Number(a.riskPerTrade) || 0);
 
-  const lossesLeft = risk > 0 ? Math.max(0, Math.floor(buffer / risk)) : null;
+  // Verlusttrades bis zum MLL. Fix: Puffer ÷ Risiko. Dynamisch: Serie von vollen
+  // Verlusten durchspielen — das Risiko schrumpft nach jedem Verlust mit dem Puffer.
+  let lossesLeft = null;
+  if (dynamic) {
+    let b = buffer, n = 0;
+    while (b > 0 && n < 99) {
+      const r = dynamicRisk(b, riskDivisor, riskMin);
+      if (r <= 0) break;
+      b -= r; n++;
+    }
+    lossesLeft = buffer > 0 ? n : 0;
+  } else if (risk > 0) {
+    lossesLeft = Math.max(0, Math.floor(buffer / risk));
+  }
   const bufferPct = trail > 0 ? Math.max(0, Math.min(1, buffer / trail)) : 0;
 
   const target = Number(a.target) || 0;
@@ -344,7 +364,7 @@ export function calcAccount(a) {
     balance, start, trail, highWater, profit,
     ddLevel, ddLocked, pendingDdLevel: pending.level, dayUnclosed,
     buffer, bufferAfterClose, bufferPct,
-    lossesLeft, risk, riskDivisor, riskMin,
+    lossesLeft, risk, riskMode: dynamic ? 'dynamic' : 'fix', riskDivisor, riskMin,
     target, targetProgress, toTarget,
     bestDay, maxAllowedDay, consistencyOk, consistencyKnown, neededProfitForConsistency,
     safetyNet, toSafetyNet, safetyNetPct,

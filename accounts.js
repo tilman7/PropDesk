@@ -4,6 +4,11 @@ import { T, SANS, NUM, display, cap } from './theme.js';
 import { h, useNarrow, FirmMark, inputS, numS, Label, Field, Bar, Chip, PhaseTag, DataRow, Modal, ModalHead, Btn, Ghost, Danger, SectionLabel, ColHead, Panel } from './ui.js';
 import { calcAccount, fmt, fmtUsd, PRESETS, FIRMS, firmId, firmLabel, riskDefault, riskMinSuggestion, RISK_DIVISOR_DEFAULT, uid } from './lib.js';
 
+// Kurzbeschreibung des Risiko-Modus für Tabelle, Detail und Formular.
+export const riskModeLabel = (c) => (c.riskMode === 'dynamic'
+  ? `Puffer ÷ ${c.riskDivisor}${c.riskMin ? ` · min ${fmtUsd(c.riskMin)}` : ''}`
+  : 'Fix');
+
 const bufferColor = (pct) => (pct > 0.5 ? T.green : pct > 0.25 ? T.amber : T.red);
 export const COLS = '1.6fr 0.8fr 0.9fr 1.5fr 0.7fr 1.1fr';
 
@@ -55,7 +60,7 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
         ),
         h('div', { style: { textAlign: 'right', flexShrink: 0 } },
           h('div', { style: { ...display(21) } }, fmtUsd(c.risk)),
-          h('div', { style: { fontSize: 10.5, color: T.faint, marginTop: 4 } }, 'Risiko / Trade')
+          h('div', { style: { fontSize: 10.5, color: T.faint, marginTop: 4, ...NUM } }, c.riskMode === 'dynamic' ? `Risiko · ÷ ${c.riskDivisor}` : 'Risiko / Trade')
         )
       ),
       h('div', { style: { marginTop: 14 } },
@@ -95,7 +100,9 @@ export function AccountRow({ a, onOpen, onQuickBalance }) {
         h(FirmMark, { firm: firmId(a.firm), size: 11 }), `${firmLabel(a.firm)} · ${fmtUsd(a.size)}`)
     ),
     h('div', null, h(PhaseTag, { phase: a.phase })),
-    h('div', { style: { textAlign: 'right', ...display(20) } }, fmtUsd(c.risk)),
+    h('div', { style: { textAlign: 'right' } },
+      h('div', { style: display(20) }, fmtUsd(c.risk)),
+      c.riskMode === 'dynamic' && h('div', { style: { fontSize: 11, color: T.faint, marginTop: 4, ...NUM } }, `÷ ${c.riskDivisor}`)),
     h('div', null,
       h('div', { style: { display: 'flex', justifyContent: 'space-between', fontSize: 12, marginBottom: 7, ...NUM } },
         h('span', { style: { color: bc, fontWeight: 500 } }, fmtUsd(c.buffer)),
@@ -184,7 +191,7 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
         h(SectionLabel, null, 'Max. Risiko / Trade'),
         h('div', { style: { ...display(40), marginTop: 12 } }, fmtUsd(c.risk)),
         a.riskMode === 'dynamic' && h('div', { style: { fontSize: 11.5, color: T.faint, marginTop: 10, ...NUM } },
-          `Dynamisch · Puffer ÷ ${c.riskDivisor}${c.riskMin ? ` · min ${fmtUsd(c.riskMin)}` : ''}`)
+          `Dynamisch · ${riskModeLabel(c)}`)
       ),
       h('div', { style: { background: T.bg, padding: '20px 22px 22px' } },
         h(SectionLabel, null, 'Puffer bis Drawdown'),
@@ -256,9 +263,7 @@ export function AccountDetail({ a, onBack, onSave, onDelete, onEdit, onDuplicate
         h(DataRow, { label: 'Trailing Drawdown', value: fmtUsd(c.trail) }),
         h(DataRow, {
           label: 'Risiko-Modus',
-          value: a.riskMode === 'dynamic'
-            ? `Dynamisch · Puffer ÷ ${c.riskDivisor}${c.riskMin ? ` · min ${fmtUsd(c.riskMin)}` : ''}`
-            : 'Fix',
+          value: c.riskMode === 'dynamic' ? `Dynamisch · ${riskModeLabel(c)}` : 'Fix',
         }),
         a.dll ? h(DataRow, { label: 'Daily Loss Limit', value: fmtUsd(a.dll) }) : null,
         a.phase === 'eval' && h(DataRow, { label: 'Profit-Target', value: `${fmtUsd(c.profit)} / ${fmtUsd(c.target)}` }),
@@ -403,7 +408,7 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
       fontSize: 13, fontWeight: riskMode === id ? 500 : 400, cursor: 'pointer', fontFamily: SANS,
     },
   }, label);
-  const riskPreview = riskMode === 'dynamic' ? calcAccount(f) : null;
+  const riskPreview = calcAccount({ ...f, riskMode });
 
   const two = { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0 16px' };
 
@@ -469,7 +474,7 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
         ? [
             h(Field, { key: 'riskDivisor', label: `Divisor N (Standard ${RISK_DIVISOR_DEFAULT})` },
               h('input', { type: 'number', value: f.riskDivisor, onChange: num('riskDivisor'), style: { ...numS(), borderColor: T.text } })),
-            h(Field, { key: 'riskMin', label: 'Minimum pro Trade (USD)' },
+            h(Field, { key: 'riskMin', label: 'Minimum (USD, optional)' },
               h('input', { type: 'number', value: f.riskMin, onChange: num('riskMin'), style: numS() })),
           ]
         : h(Field, { key: 'riskFix', label: `Max. Risiko pro Trade (USD) · Standard $${riskDefault(f.phase)}` },
@@ -480,9 +485,7 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
         h('input', { type: 'date', value: f.expiryDate || '', onChange: (e) => set('expiryDate', e.target.value), style: inputS() }))
     ),
 
-    riskPreview && h('div', { style: { fontSize: 11.5, color: T.faint, margin: '-8px 0 16px', ...NUM } },
-      `Aktuell: ${fmtUsd(riskPreview.risk)} bei Puffer ${fmtUsd(riskPreview.buffer)} (Puffer ÷ ${f.riskDivisor || RISK_DIVISOR_DEFAULT}${f.riskMin ? `, min ${fmtUsd(f.riskMin)}` : ''})`
-    ),
+    h(RiskPreview, { c: riskPreview }),
 
     h('button', {
       onClick: () => setMore(!more),
@@ -537,8 +540,22 @@ export function AccountForm({ initial, onClose, onSubmit, chfRate }) {
   );
 }
 
+// Live-Vorschau beim Eintippen: Puffer bis MLL und das Risiko, das daraus folgt.
+function RiskPreview({ c }) {
+  const row = (label, value, color) => h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 12, padding: '3px 0' } },
+    h('span', { style: { color: T.muted } }, label),
+    h('span', { style: { color: color || T.text, fontWeight: 500, ...NUM } }, value));
+  return h('div', { style: { fontSize: 12.5, borderTop: `1px solid ${T.borderSoft}`, borderBottom: `1px solid ${T.borderSoft}`, padding: '8px 0', margin: '0 0 16px' } },
+    row('Puffer bis MLL', fmtUsd(Math.max(0, c.buffer)), c.buffer > 0 ? null : T.red),
+    row(c.riskMode === 'dynamic' ? `Risiko (${riskModeLabel(c)})` : 'Risiko (fix)', fmtUsd(c.risk)),
+    row('Verlusttrades bis MLL', c.lossesLeft === null ? '–' : String(c.lossesLeft), c.lossesLeft !== null && c.lossesLeft <= 3 ? T.red : null)
+  );
+}
+
 export function QuickBalance({ a, onClose, onSave }) {
   const [v, setV] = useState(String(a.balance));
+  const val = parseFloat(v);
+  const preview = calcAccount({ ...a, balance: isNaN(val) ? 0 : val });
   return h(Modal, { onClose, max: 360, z: 70, center: true },
     h('div', { style: { fontSize: 17, fontWeight: 600, letterSpacing: '-0.015em' } }, a.name),
     h('div', { style: { fontSize: 12.5, color: T.muted, margin: '6px 0 18px' } }, 'Neue Balance eintragen'),
@@ -547,6 +564,7 @@ export function QuickBalance({ a, onClose, onSave }) {
       onKeyDown: (e) => e.key === 'Enter' && onSave(parseFloat(v) || 0, false),
       style: { ...numS(), fontSize: 22, fontWeight: 500, letterSpacing: '-0.03em', padding: '14px', marginBottom: 12 },
     }),
+    h(RiskPreview, { c: preview }),
     h(Btn, { style: { width: '100%', marginBottom: 8 }, onClick: () => onSave(parseFloat(v) || 0, false) }, 'Speichern'),
     h(Ghost, {
       onClick: () => onSave(parseFloat(v) || 0, true),
